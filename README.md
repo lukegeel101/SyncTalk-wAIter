@@ -1,4 +1,22 @@
 # SyncTalk: The Devil😈 is in the Synchronization for Talking Head Synthesis [CVPR 2024]
+
+[Reposting] Job Advertisement:
+
+
+[URGENT HIRING: CTO] [REMOTE WORK AVAILABLE] California-based AI + Web3 + Social Startup Building Next-Generation Virtual Companionship Products!
+
+✅ Technical Focus: AI Digital Humans × Social × Web3 Economic Models (Next-Generation Virtual Companions)
+
+✅ Project Maturity: MVP launched, seed users validated, complete business model established
+
+✅ Team Advantages: Full-function founding team ready, seeking passionate and responsible technical leader
+
+✅ Global Remote: California headquarters support with global remote collaboration
+
+Resume Direct Contact: maggie@digiternity.ai (GitHub/LinkedIn attachments preferred, 24-hour response guaranteed)
+
+---
+
 The official repository of the paper [SyncTalk: The Devil is in the Synchronization for Talking Head Synthesis](https://arxiv.org/abs/2311.17590)
 
 <p align='center'>
