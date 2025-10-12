@@ -3,6 +3,8 @@ from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import FileResponse, JSONResponse
 import os, uuid, subprocess, shlex, glob
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+
 
 
 app = FastAPI()
@@ -13,6 +15,19 @@ OUT_DIR=f"{WORKSPACE}/results"
 os.makedirs(OUT_DIR, exist_ok=True)
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+@app.get("/", response_class=HTMLResponse)
+def home():
+    return """
+    <h3>SyncTalk GPU Worker</h3>
+    <p>Try <a href="/health">/health</a> or POST a WAV to <code>/render</code>.</p>
+    <form action="/render" method="post" enctype="multipart/form-data">
+      <input type="hidden" name="token" value="supersecrettoken"/>
+      <input type="file" name="wav" accept="audio/wav"/>
+      <button type="submit">Render</button>
+    </form>
+    """
 
 @app.get("/health")
 def health():
