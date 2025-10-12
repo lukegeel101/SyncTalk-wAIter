@@ -6,6 +6,7 @@ app = FastAPI()
 
 # Paths – adjust to match your Colab project structure
 PROJECT_ROOT = "/app/SyncTalk"
+DATA_ROOT    = f"{PROJECT_ROOT}/data/May"              # ABSOLUTE now
 DEMO_DIR = f"{PROJECT_ROOT}/demo"
 WORKSPACE = f"{PROJECT_ROOT}/model/trial_may"
 RESULTS_DIR = f"{WORKSPACE}/results"
@@ -26,20 +27,24 @@ def index():
 
 @app.post("/generate")
 def generate(text: str = Form(...)):
-    # 1. Generate WAV from text
-    wav_path = os.path.join(DEMO_DIR, "input.wav")
-    mp3_path = wav_path.replace(".wav", ".mp3")
-
     # use gTTS
     from gtts import gTTS
     from pydub import AudioSegment
+    
+    # 1. Generate WAV from text
+    mp3_path = os.path.join(DEMO_DIR, "input.mp3")
+    wav_path = os.path.join(DEMO_DIR, "input.wav")
+
+    
     tts = gTTS(text)
     tts.save(mp3_path)
+    
     audio = AudioSegment.from_mp3(mp3_path)
+    audio = audio.set_frame_rate(48000).set_channels(1).set_sample_width(2)  # 48k, mono, 16-bit
     audio.export(wav_path, format="wav")
 
     # 2. Run your generator
-    cmd = f"python {PROJECT_ROOT}/main.py data/May --workspace {WORKSPACE} -O --test --test_train --asr_model ave --portrait --aud {wav_path}"
+    cmd = f"python {PROJECT_ROOT}/main.py {DATA_ROOT} --workspace {WORKSPACE} -O --test --test_train --asr_model ave --portrait --aud {wav_path}"
     subprocess.run(shlex.split(cmd), check=True)
 
     # 3. Find newest mp4
