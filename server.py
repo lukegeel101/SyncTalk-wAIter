@@ -43,6 +43,11 @@ def generate(text: str = Form(...)):
     audio = audio.set_frame_rate(48000).set_channels(1).set_sample_width(2)  # 48k, mono, 16-bit
     audio.export(wav_path, format="wav")
 
+    assert os.path.isdir(DATA_ROOT), f"Missing DATA_ROOT: {DATA_ROOT}"
+    assert os.path.isdir(WORKSPACE), f"Missing WORKSPACE: {WORKSPACE}"
+    assert os.path.exists(wav_path) and os.path.getsize(wav_path) > 0, "WAV not created or empty"
+
+
     # 2. Run your generator
     cmd = f"python {PROJECT_ROOT}/main.py {DATA_ROOT} --workspace {WORKSPACE} -O --test --test_train --asr_model ave --portrait --aud {wav_path}"
     subprocess.run(shlex.split(cmd), check=True)
