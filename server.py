@@ -5,7 +5,7 @@ import subprocess, uuid, os, shlex, glob
 app = FastAPI()
 
 # Paths – adjust to match your Colab project structure
-PROJECT_ROOT = "/app/SyncTalk"
+PROJECT_ROOT = "/app"
 DATA_ROOT    = f"{PROJECT_ROOT}/data/May"              # ABSOLUTE now
 DEMO_DIR = f"{PROJECT_ROOT}/demo"
 WORKSPACE = f"{PROJECT_ROOT}/model/trial_may"
