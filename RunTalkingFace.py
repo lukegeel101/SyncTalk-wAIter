@@ -87,12 +87,14 @@ def run_face_generator(
 
     print(">>> Running:", " ".join(shlex.quote(c) for c in cmd), flush=True)
     proc = subprocess.run(
-      cmd,
+      shlex.split(cmd),
       text=True,
       capture_output=True,
       env={**os.environ, "DISABLE_MIC": "1", "CUDA_VISIBLE_DEVICES": ""}  # disable mic + force CPU if needed
   )
     print(proc.stdout)
+    print("=== main.py STDOUT ===\n", proc.stdout)
+    print("=== main.py STDERR ===\n", proc.stderr)
     if proc.returncode != 0:
       # Log everything so you can see it in DO logs
       print("=== main.py STDOUT ===\n", proc.stdout)
