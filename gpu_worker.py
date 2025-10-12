@@ -2,6 +2,8 @@
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import FileResponse, JSONResponse
 import os, uuid, subprocess, shlex, glob
+from fastapi.middleware.cors import CORSMiddleware
+
 
 app = FastAPI()
 PROJECT_ROOT="/app"
@@ -9,6 +11,12 @@ DATA_ROOT=f"{PROJECT_ROOT}/data/May"
 WORKSPACE=f"{PROJECT_ROOT}/model/trial_may"
 OUT_DIR=f"{WORKSPACE}/results"
 os.makedirs(OUT_DIR, exist_ok=True)
+
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+@app.get("/health")
+def health():
+    return {"ok": True}
 
 @app.post("/render")
 async def render(text: str = Form(None), wav: UploadFile = File(None)):
