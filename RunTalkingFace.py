@@ -73,23 +73,36 @@ def run_face_generator(
       python main.py data/May --workspace model/trial_may -O --test --test_train --asr_model ave --portrait --aud ./demo/xxx.wav
     """
     cmd = [
-        sys.executable, str(PROJECT_ROOT / "main.py"), str(data_root),
-        "--workspace", str(workspace),
-        "-O", "--test", "--test_train",
-        "--asr_model", asr_model,
-        "--aud", str(wav_path)
-    ]
+      "python", f"{PROJECT_ROOT}/main.py", DATA_ROOT,
+      "--workspace", WORKSPACE,
+      "-O", "--test", "--test_train",
+      "--asr_model", "ave",
+      "--portrait",
+      "--aud", wav_path,
+  ]
     if portrait:
         cmd.append("--portrait")
     if extra_flags:
         cmd.extend(extra_flags)
 
     print(">>> Running:", " ".join(shlex.quote(c) for c in cmd), flush=True)
-    proc = subprocess.run(cmd, text=True, capture_output=True)
+    proc = subprocess.run(
+      cmd,
+      text=True,
+      capture_output=True,
+      env={**os.environ, "DISABLE_MIC": "1", "CUDA_VISIBLE_DEVICES": ""}  # disable mic + force CPU if needed
+  )
     print(proc.stdout)
     if proc.returncode != 0:
-        print(proc.stderr, file=sys.stderr)
-        raise SystemExit(proc.returncode)
+      # Log everything so you can see it in DO logs
+      print("=== main.py STDOUT ===\n", proc.stdout)
+      print("=== main.py STDERR ===\n", proc.stderr)
+      # Show a concise error in the page, with a snippet for debugging
+      from fastapi.responses import PlainTextResponse
+      return PlainTextResponse(
+          f"main.py failed (exit {proc.returncode})\n\nSTDERR:\n{proc.stderr[-4000:]}",
+          status_code=500
+      )
 
     # Find newest mp4 in results
     vids = glob.glob(str(RESULTS_DIR / "*.mp4"))
