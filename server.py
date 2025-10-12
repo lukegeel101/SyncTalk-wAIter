@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Form
 from fastapi.responses import JSONResponse, HTMLResponse
-import subprocess, uuid, os, shlex, glob
+import subprocess, uuid, os, shlex, glob, shutil
 
 app = FastAPI()
 
@@ -10,6 +10,7 @@ DATA_ROOT    = f"{PROJECT_ROOT}/data/May"              # ABSOLUTE now
 DEMO_DIR = f"{PROJECT_ROOT}/demo"
 WORKSPACE = f"{PROJECT_ROOT}/model/trial_may"
 RESULTS_DIR = f"{WORKSPACE}/results"
+
 os.makedirs(DEMO_DIR, exist_ok=True)
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
@@ -17,29 +18,90 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 GDRIVE_DATA_ID  = "18Q2H612CAReFxBd9kxr-i1dD8U1AUfsV"  # May.zip
 GDRIVE_MODEL_ID = "1C2639qi9jvhRygYHwPZDGs8pun3po3W7"  # trial_may.zip
 
+def _run(cmd:list):
+    proc = subprocess.run(cmd, text=True, capture_output=True)
+    if proc.returncode != 0:
+        print("CMD FAILED:", " ".join(cmd))
+        print("STDOUT:", proc.stdout)
+        print("STDERR:", proc.stderr)
+        raise RuntimeError(f"Command failed: {' '.join(cmd)}")
+    return proc.stdout
+
 
 def ensure_assets():
-    """Download & unzip data/May and model/trial_may if missing."""
-    # We’ll use gdown (install in Dockerfile/requirements)
-    def _need(path): return not os.path.exists(path)
-    def _dl_and_unzip(file_id: str, out_zip: str, dest_dir: str):
-        os.makedirs(os.path.dirname(out_zip), exist_ok=True)
-        # download
-        subprocess.run(["gdown", "--fuzzy", f"https://drive.google.com/uc?id={file_id}", "-O", out_zip],
-                       check=True)
-        # unzip
-        os.makedirs(dest_dir, exist_ok=True)
-        subprocess.run(["unzip", "-o", out_zip, "-d", os.path.dirname(dest_dir)], check=True)
-        # optional: remove zip
-        try: os.remove(out_zip)
+    # Ensure gdown exists
+    try:
+        _run(["gdown", "--version"])
+    except Exception:
+        # Install gdown at runtime if missing (should already be in requirements)
+        _run([os.sys.executable, "-m", "pip", "install", "gdown"])
+
+    # --- DATA (May) ---
+    if not os.path.isdir(DATA_ROOT):
+        os.makedirs(f"{PROJECT_ROOT}/data", exist_ok=True)
+        zip_path = f"{PROJECT_ROOT}/data/May.zip"
+        print("[BOOT] Downloading May.zip…")
+        _run(["gdown", "--fuzzy", f"https://drive.google.com/uc?id={GDRIVE_DATA_ID}", "-O", zip_path])
+        print("[BOOT] Unzipping May.zip…")
+        _run(["unzip", "-o", zip_path, "-d", f"{PROJECT_ROOT}/data"])
+        try: os.remove(zip_path)
         except: pass
 
-    # data/May
-    if _need(DATA_ROOT):
-        _dl_and_unzip(GDRIVE_DATA_ID, f"{PROJECT_ROOT}/data/May.zip", f"{PROJECT_ROOT}/data")
-    # model/trial_may
-    if _need(WORKSPACE):
-        _dl_and_unzip(GDRIVE_MODEL_ID, f"{PROJECT_ROOT}/model/trial_may.zip", f"{PROJECT_ROOT}/model")
+        # Normalize: find any extracted dir that looks like May and move/rename it
+        if not os.path.isdir(DATA_ROOT):
+            candidates = [p for p in glob.glob(f"{PROJECT_ROOT}/data/*") if os.path.isdir(p)]
+            # pick folder named "May" (case-insensitive) or containing expected files
+            pick = None
+            for p in candidates:
+                base = os.path.basename(p).lower()
+                if base == "may":
+                    pick = p; break
+            if not pick and candidates:
+                # last resort: if only one folder, use it
+                pick = candidates[0]
+            if pick and pick != DATA_ROOT:
+                print(f"[BOOT] Renaming '{pick}' -> '{DATA_ROOT}'")
+                if os.path.isdir(DATA_ROOT):
+                    shutil.rmtree(DATA_ROOT)
+                shutil.move(pick, DATA_ROOT)
+
+    # --- MODEL (trial_may) ---
+    if not os.path.isdir(WORKSPACE):
+        os.makedirs(f"{PROJECT_ROOT}/model", exist_ok=True)
+        zip_path = f"{PROJECT_ROOT}/model/trial_may.zip"
+        print("[BOOT] Downloading trial_may.zip…")
+        _run(["gdown", "--fuzzy", f"https://drive.google.com/uc?id={GDRIVE_MODEL_ID}", "-O", zip_path])
+        print("[BOOT] Unzipping trial_may.zip…")
+        _run(["unzip", "-o", zip_path, "-d", f"{PROJECT_ROOT}/model"])
+        try: os.remove(zip_path)
+        except: pass
+
+        if not os.path.isdir(WORKSPACE):
+            candidates = [p for p in glob.glob(f"{PROJECT_ROOT}/model/*") if os.path.isdir(p)]
+            pick = None
+            for p in candidates:
+                base = os.path.basename(p).lower()
+                if base == "trial_may":
+                    pick = p; break
+            if not pick and candidates:
+                pick = candidates[0]
+            if pick and pick != WORKSPACE:
+                print(f"[BOOT] Renaming '{pick}' -> '{WORKSPACE}'")
+                if os.path.isdir(WORKSPACE):
+                    shutil.rmtree(WORKSPACE)
+                shutil.move(pick, WORKSPACE)
+
+    # Debug tree
+    def ls(path):
+        try:
+            return os.listdir(path)
+        except Exception as e:
+            return f"<err: {e}>"
+    print("[BOOT] /app contents:", ls("/app"))
+    print("[BOOT] /app/data contents:", ls(f"{PROJECT_ROOT}/data"))
+    print("[BOOT] /app/model contents:", ls(f"{PROJECT_ROOT}/model"))
+    print("[BOOT] DATA_ROOT exists:", os.path.isdir(DATA_ROOT), DATA_ROOT)
+    print("[BOOT] WORKSPACE exists:", os.path.isdir(WORKSPACE), WORKSPACE)
 
 @app.get("/")
 def index():
