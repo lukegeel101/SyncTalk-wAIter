@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+gTTS
+pydub
+ffmpeg-python
+pyaudio
+opencv-python-headless==4.10.0.84   # only if your runtime actually imports cv2
+# add ONLY what main.py needs to render (not train)
