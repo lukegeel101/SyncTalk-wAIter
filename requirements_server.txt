@@ -14,4 +14,7 @@ torchvision==0.18.1+cpu
 torchaudio==2.3.1+cpu
 --extra-index-url https://download.pytorch.org/whl/cpu
 
+trimesh==4.4.9
+networkx>=2.8          # trimesh uses this
+
 # add ONLY what main.py needs to render (not train)
