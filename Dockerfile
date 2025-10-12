@@ -3,7 +3,7 @@ WORKDIR /app
 
 # System deps for PyAudio + ffmpeg
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential portaudio19-dev libasound2-dev ffmpeg \
+    build-essential portaudio19-dev libasound2-dev ffmpeg unzip\
  && rm -rf /var/lib/apt/lists/*
 
 COPY requirements_server.txt /app/
