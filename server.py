@@ -1,14 +1,15 @@
 from fastapi import FastAPI, Form
 from fastapi.responses import JSONResponse, HTMLResponse
 import subprocess, uuid, os, shlex, glob, shutil
+from pathlib import Path
 
 app = FastAPI()
 
 # Paths – adjust to match your Colab project structure
-PROJECT_ROOT = "/app"
-DATA_ROOT    = f"{PROJECT_ROOT}/data/May"              # ABSOLUTE now
-DEMO_DIR = f"{PROJECT_ROOT}/demo"
-WORKSPACE = f"{PROJECT_ROOT}/model/trial_may"
+PROJECT_ROOT = Path("/app")  # or Path(__file__).resolve().parent
+DATA_ROOT    = PROJECT_ROOT / "data" / "May"
+DEMO_DIR     = PROJECT_ROOT / "demo"
+WORKSPACE    = PROJECT_ROOT / "model" / "trial_may"
 RESULTS_DIR = f"{WORKSPACE}/results"
 
 os.makedirs(DEMO_DIR, exist_ok=True)
@@ -123,7 +124,9 @@ def generate(text: str = Form(...)):
     
     # 1. Generate WAV from text
     mp3_path = os.path.join(DEMO_DIR, "input.mp3")
-    wav_path = os.path.join(DEMO_DIR, "input.wav")
+    #wav_path = os.path.join(DEMO_DIR, "input.wav")
+    wav_path = str(DEMO_DIR / "input.wav")
+
 
     
     tts = gTTS(text)
@@ -141,8 +144,29 @@ def generate(text: str = Form(...)):
 
 
     # 2. Run your generator
-    cmd = f"python {PROJECT_ROOT}/main.py {DATA_ROOT} --workspace {WORKSPACE} -O --test --test_train --asr_model ave --portrait --aud {wav_path}"
-    subprocess.run(shlex.split(cmd), check=True)
+    cmd = [
+        sys.executable,                          # <-- was "python"
+        str(PROJECT_ROOT / "main.py"),
+        str(DATA_ROOT),
+        "--workspace", str(WORKSPACE),
+        "-O", "--test", "--test_train",
+        "--asr_model", "ave",
+        "--portrait",
+        "--aud", wav_path,
+    ]    
+
+    # helpful asserts (catch missing assets early)
+    assert DATA_ROOT.is_dir(), f"Missing DATA_ROOT: {DATA_ROOT}"
+    assert WORKSPACE.is_dir(), f"Missing WORKSPACE: {WORKSPACE}"
+    assert os.path.exists(wav_path) and os.path.getsize(wav_path) > 0, "WAV not created or empty"
+    
+    # ensure imports resolve in the child too
+    child_env = os.environ.copy()
+    child_env["PYTHONPATH"] = f"/app:{child_env.get('PYTHONPATH','')}"
+    
+    subprocess.run(cmd, check=True, env=child_env)
+
+    #subprocess.run(shlex.split(cmd), check=True)
 
     # 3. Find newest mp4
     mp4_files = glob.glob(f"{RESULTS_DIR}/*.mp4")
