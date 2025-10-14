@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Form
 from fastapi.responses import JSONResponse, HTMLResponse
-import subprocess, uuid, os, shlex, glob, shutil
+import subprocess, uuid, os, shlex, glob, shutil, sys
 from pathlib import Path
 
 app = FastAPI()
