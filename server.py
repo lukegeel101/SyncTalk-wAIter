@@ -184,7 +184,7 @@ def generate(text: str = Form(...)):
       <h3>Input:</h3><p>{text}</p>
       <h3>Output video:</h3>
       <video controls width="640">
-        <source src="/file?path={newest}" type="video/mp4">
+        <source src="/results/ngp_ep0019_audio.mp4" type="video/mp4">
       </video>
       <br><br><a href="/">Go back</a>
     </body></html>
