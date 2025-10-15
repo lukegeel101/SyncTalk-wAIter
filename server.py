@@ -6,23 +6,27 @@ from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 
+# Always resolve paths relative to this file's folder:
+BASE = Path(__file__).resolve().parent          # e.g., /workspace/app
+PROJECT_ROOT = BASE
 
-# Paths – adjust to match your Colab project structure
-PROJECT_ROOT = Path("/workspace/app")  # or Path(__file__).resolve().parent
-DATA_ROOT    = PROJECT_ROOT / "data" / "May"
-DEMO_DIR     = PROJECT_ROOT / "demo"
-WORKSPACE    = PROJECT_ROOT / "model" / "trial_may"
-RESULTS_DIR = f"{WORKSPACE}/results"
+DATA_ROOT   = PROJECT_ROOT / "data" / "May"
+WORKSPACE   = PROJECT_ROOT / "model" / "trial_may"
+DEMO_DIR    = PROJECT_ROOT / "demo"
+RESULTS_DIR = WORKSPACE / "results"
 
-os.makedirs(DEMO_DIR, exist_ok=True)
-os.makedirs(RESULTS_DIR, exist_ok=True)
+DEMO_DIR.mkdir(parents=True, exist_ok=True)
+RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+
+print("[BOOT] PROJECT_ROOT:", PROJECT_ROOT)
+print("[BOOT] DATA_ROOT:", DATA_ROOT, "exists:", DATA_ROOT.is_dir())
+print("[BOOT] WORKSPACE:", WORKSPACE, "exists:", WORKSPACE.is_dir())
 
 app.mount(
     "/results",
     StaticFiles(directory=str(RESULTS_DIR), html=False),
     name="results",
 )
-
 
 GDRIVE_DATA_ID  = "18Q2H612CAReFxBd9kxr-i1dD8U1AUfsV"  # May.zip
 GDRIVE_MODEL_ID = "1C2639qi9jvhRygYHwPZDGs8pun3po3W7"  # trial_may.zip
