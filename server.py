@@ -40,7 +40,12 @@ def _run(cmd:list):
         raise RuntimeError(f"Command failed: {' '.join(cmd)}")
     return proc.stdout
 
-
+def latest_audio_mp4(results_dir: Path) -> Path:
+    files = sorted(results_dir.glob("*_audio.mp4"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not files:
+        raise FileNotFoundError("No *_audio.mp4 found in results.")
+    return files[0]
+    
 def ensure_assets():
     # Ensure gdown exists
     try:
@@ -178,18 +183,22 @@ def generate(text: str = Form(...)):
     
     subprocess.run(cmd, check=True, env=child_env)
 
+    
+
     #subprocess.run(shlex.split(cmd), check=True)
 
     # 3. Find newest mp4
     mp4_files = glob.glob(f"{RESULTS_DIR}/*.mp4")
     newest = max(mp4_files, key=os.path.getmtime)
 
+    out_path = latest_audio_mp4(RESULTS_DIR)
+    rel_url = f"/results/{out_path.name}"
     return HTMLResponse(f"""
     <html><body style='font-family:system-ui'>
       <h3>Input:</h3><p>{text}</p>
       <h3>Output video:</h3>
       <video controls width="640">
-        <source src="/results/ngp_ep0019_audio.mp4" type="video/mp4">
+        <source src="{rel_url}" type="video/mp4">
       </video>
       <br><br><a href="/">Go back</a>
     </body></html>
