@@ -6,10 +6,9 @@ from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 
-# Always resolve paths relative to this file's folder:
-BASE = Path(__file__).resolve().parent          # e.g., /workspace/app
+# --- Paths (self-relative) ---
+BASE = Path(__file__).resolve().parent         
 PROJECT_ROOT = BASE
-
 DATA_ROOT   = PROJECT_ROOT / "data" / "May"
 WORKSPACE   = PROJECT_ROOT / "model" / "trial_may"
 DEMO_DIR    = PROJECT_ROOT / "demo"
@@ -51,75 +50,58 @@ def ensure_assets():
     try:
         _run(["gdown", "--version"])
     except Exception:
-        # Install gdown at runtime if missing (should already be in requirements)
-        _run([os.sys.executable, "-m", "pip", "install", "gdown"])
+        _run([sys.executable, "-m", "pip", "install", "gdown"])
 
-    # --- DATA (May) ---
-    if not os.path.isdir(DATA_ROOT):
-        os.makedirs(f"{PROJECT_ROOT}/data", exist_ok=True)
-        zip_path = f"{PROJECT_ROOT}/data/May.zip"
+    # DATA (May)
+    if not DATA_ROOT.is_dir():
+        (PROJECT_ROOT / "data").mkdir(parents=True, exist_ok=True)
+        zip_path = PROJECT_ROOT / "data" / "May.zip"
         print("[BOOT] Downloading May.zip…")
-        _run(["gdown", "--fuzzy", f"https://drive.google.com/uc?id={GDRIVE_DATA_ID}", "-O", zip_path])
+        _run(["gdown", "--fuzzy", f"https://drive.google.com/uc?id={GDRIVE_DATA_ID}", "-O", str(zip_path)])
         print("[BOOT] Unzipping May.zip…")
-        _run(["unzip", "-o", zip_path, "-d", f"{PROJECT_ROOT}/data"])
-        try: os.remove(zip_path)
+        _run(["unzip", "-o", str(zip_path), "-d", str(PROJECT_ROOT / "data")])
+        try: zip_path.unlink()
         except: pass
-
-        # Normalize: find any extracted dir that looks like May and move/rename it
-        if not os.path.isdir(DATA_ROOT):
-            candidates = [p for p in glob.glob(f"{PROJECT_ROOT}/data/*") if os.path.isdir(p)]
-            # pick folder named "May" (case-insensitive) or containing expected files
-            pick = None
-            for p in candidates:
-                base = os.path.basename(p).lower()
-                if base == "may":
-                    pick = p; break
-            if not pick and candidates:
-                # last resort: if only one folder, use it
-                pick = candidates[0]
+        if not DATA_ROOT.is_dir():
+            # Try to normalize folder name to "May"
+            candidates = [p for p in (PROJECT_ROOT / "data").glob("*") if p.is_dir()]
+            pick = next((p for p in candidates if p.name.lower() == "may"), candidates[0] if candidates else None)
             if pick and pick != DATA_ROOT:
                 print(f"[BOOT] Renaming '{pick}' -> '{DATA_ROOT}'")
-                if os.path.isdir(DATA_ROOT):
+                if DATA_ROOT.exists():
                     shutil.rmtree(DATA_ROOT)
-                shutil.move(pick, DATA_ROOT)
+                shutil.move(str(pick), str(DATA_ROOT))
 
-    # --- MODEL (trial_may) ---
-    if not os.path.isdir(WORKSPACE):
-        os.makedirs(f"{PROJECT_ROOT}/model", exist_ok=True)
-        zip_path = f"{PROJECT_ROOT}/model/trial_may.zip"
+    # MODEL (trial_may)
+    if not WORKSPACE.is_dir():
+        (PROJECT_ROOT / "model").mkdir(parents=True, exist_ok=True)
+        zip_path = PROJECT_ROOT / "model" / "trial_may.zip"
         print("[BOOT] Downloading trial_may.zip…")
-        _run(["gdown", "--fuzzy", f"https://drive.google.com/uc?id={GDRIVE_MODEL_ID}", "-O", zip_path])
+        _run(["gdown", "--fuzzy", f"https://drive.google.com/uc?id={GDRIVE_MODEL_ID}", "-O", str(zip_path)])
         print("[BOOT] Unzipping trial_may.zip…")
-        _run(["unzip", "-o", zip_path, "-d", f"{PROJECT_ROOT}/model"])
-        try: os.remove(zip_path)
+        _run(["unzip", "-o", str(zip_path), "-d", str(PROJECT_ROOT / "model")])
+        try: zip_path.unlink()
         except: pass
-
-        if not os.path.isdir(WORKSPACE):
-            candidates = [p for p in glob.glob(f"{PROJECT_ROOT}/model/*") if os.path.isdir(p)]
-            pick = None
-            for p in candidates:
-                base = os.path.basename(p).lower()
-                if base == "trial_may":
-                    pick = p; break
-            if not pick and candidates:
-                pick = candidates[0]
+        if not WORKSPACE.is_dir():
+            candidates = [p for p in (PROJECT_ROOT / "model").glob("*") if p.is_dir()]
+            pick = next((p for p in candidates if p.name.lower() == "trial_may"), candidates[0] if candidates else None)
             if pick and pick != WORKSPACE:
                 print(f"[BOOT] Renaming '{pick}' -> '{WORKSPACE}'")
-                if os.path.isdir(WORKSPACE):
+                if WORKSPACE.exists():
                     shutil.rmtree(WORKSPACE)
-                shutil.move(pick, WORKSPACE)
+                shutil.move(str(pick), str(WORKSPACE))
 
-    # Debug tree
-    def ls(path):
+    # Debug tree (use PROJECT_ROOT, not /app)
+    def ls(p: Path):
         try:
-            return os.listdir(path)
+            return os.listdir(p)
         except Exception as e:
             return f"<err: {e}>"
-    print("[BOOT] /app contents:", ls("/app"))
-    print("[BOOT] /app/data contents:", ls(f"{PROJECT_ROOT}/data"))
-    print("[BOOT] /app/model contents:", ls(f"{PROJECT_ROOT}/model"))
-    print("[BOOT] DATA_ROOT exists:", os.path.isdir(DATA_ROOT), DATA_ROOT)
-    print("[BOOT] WORKSPACE exists:", os.path.isdir(WORKSPACE), WORKSPACE)
+    print("[BOOT] PROJECT_ROOT contents:", ls(PROJECT_ROOT))
+    print("[BOOT] DATA dir contents:", ls(PROJECT_ROOT / "data"))
+    print("[BOOT] MODEL dir contents:", ls(PROJECT_ROOT / "model"))
+    print("[BOOT] DATA_ROOT exists:", DATA_ROOT.is_dir(), DATA_ROOT)
+    print("[BOOT] WORKSPACE exists:", WORKSPACE.is_dir(), WORKSPACE)
 
 @app.get("/")
 def index():
@@ -141,10 +123,7 @@ def generate(text: str = Form(...)):
     
     # 1. Generate WAV from text
     mp3_path = os.path.join(DEMO_DIR, "input.mp3")
-    #wav_path = os.path.join(DEMO_DIR, "input.wav")
     wav_path = str(DEMO_DIR / "input.wav")
-
-
     
     tts = gTTS(text)
     tts.save(mp3_path)
@@ -155,10 +134,9 @@ def generate(text: str = Form(...)):
 
     ensure_assets()
 
-    assert os.path.isdir(DATA_ROOT), f"Missing DATA_ROOT: {DATA_ROOT}"
-    assert os.path.isdir(WORKSPACE), f"Missing WORKSPACE: {WORKSPACE}"
+    assert DATA_ROOT.is_dir(), f"Missing DATA_ROOT: {DATA_ROOT}"
+    assert WORKSPACE.is_dir(), f"Missing WORKSPACE: {WORKSPACE}"
     assert os.path.exists(wav_path) and os.path.getsize(wav_path) > 0, "WAV not created or empty"
-
 
     # 2. Run your generator
     cmd = [
@@ -171,37 +149,41 @@ def generate(text: str = Form(...)):
         "--portrait",
         "--aud", wav_path,
     ]    
-
-    # helpful asserts (catch missing assets early)
-    assert DATA_ROOT.is_dir(), f"Missing DATA_ROOT: {DATA_ROOT}"
-    assert WORKSPACE.is_dir(), f"Missing WORKSPACE: {WORKSPACE}"
-    assert os.path.exists(wav_path) and os.path.getsize(wav_path) > 0, "WAV not created or empty"
     
     # ensure imports resolve in the child too
     child_env = os.environ.copy()
-    child_env["PYTHONPATH"] = f"/app:{child_env.get('PYTHONPATH','')}"
+    child_env["PYTHONPATH"] = f"{PROJECT_ROOT}:{child_env.get('PYTHONPATH','')}"
     
     subprocess.run(cmd, check=True, env=child_env)
 
-    
-
     #subprocess.run(shlex.split(cmd), check=True)
-
-    # 3. Find newest mp4
-    mp4_files = glob.glob(f"{RESULTS_DIR}/*.mp4")
-    newest = max(mp4_files, key=os.path.getmtime)
 
     out_path = latest_audio_mp4(RESULTS_DIR)
     rel_url = f"/results/{out_path.name}"
     return HTMLResponse(f"""
-    <html><body style='font-family:system-ui'>
-      <h3>Input:</h3><p>{text}</p>
-      <h3>Output video:</h3>
-      <video controls width="640">
-        <source src="{rel_url}" type="video/mp4">
-      </video>
-      <br><br><a href="/">Go back</a>
-    </body></html>
+    <html>
+      <body style='font-family:system-ui'>
+        <h3>Input:</h3><p>{text}</p>
+
+        <h3>Output video:</h3>
+        <video id="vid" controls width="640">
+          <source src="{rel_url}" type="video/mp4">
+          Your browser does not support MP4 playback.
+        </video>
+
+        <p><a id="dl" href="{rel_url}" download>Download video</a></p>
+
+        <script>
+          // Auto-start download once the page renders
+          (function () {{
+            const a = document.getElementById('dl');
+            if (a) a.click();
+          }})();
+        </script>
+
+        <br><br><a href="/">Go back</a>
+      </body>
+    </html>
     """)
 
 @app.get("/file")
