@@ -13,7 +13,7 @@ app.mount(
 )
 
 # Paths – adjust to match your Colab project structure
-PROJECT_ROOT = Path("/app")  # or Path(__file__).resolve().parent
+PROJECT_ROOT = Path("/workspace/app")  # or Path(__file__).resolve().parent
 DATA_ROOT    = PROJECT_ROOT / "data" / "May"
 DEMO_DIR     = PROJECT_ROOT / "demo"
 WORKSPACE    = PROJECT_ROOT / "model" / "trial_may"
