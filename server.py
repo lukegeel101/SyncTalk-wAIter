@@ -6,11 +6,6 @@ from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 
-app.mount(
-    "/results",
-    StaticFiles(directory=str(RESULTS_DIR), html=False),
-    name="results",
-)
 
 # Paths – adjust to match your Colab project structure
 PROJECT_ROOT = Path("/workspace/app")  # or Path(__file__).resolve().parent
@@ -21,6 +16,12 @@ RESULTS_DIR = f"{WORKSPACE}/results"
 
 os.makedirs(DEMO_DIR, exist_ok=True)
 os.makedirs(RESULTS_DIR, exist_ok=True)
+
+app.mount(
+    "/results",
+    StaticFiles(directory=str(RESULTS_DIR), html=False),
+    name="results",
+)
 
 
 GDRIVE_DATA_ID  = "18Q2H612CAReFxBd9kxr-i1dD8U1AUfsV"  # May.zip
