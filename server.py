@@ -2,8 +2,15 @@ from fastapi import FastAPI, Form
 from fastapi.responses import JSONResponse, HTMLResponse
 import subprocess, uuid, os, shlex, glob, shutil, sys
 from pathlib import Path
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
+
+app.mount(
+    "/results",
+    StaticFiles(directory=str(RESULTS_DIR), html=False),
+    name="results",
+)
 
 # Paths – adjust to match your Colab project structure
 PROJECT_ROOT = Path("/app")  # or Path(__file__).resolve().parent
