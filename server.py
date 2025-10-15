@@ -160,20 +160,25 @@ def generate(text: str = Form(...)):
 
     out_path = latest_audio_mp4(RESULTS_DIR)
     rel_url = f"/results/{out_path.name}"
+    cache_bust = uuid.uuid4().hex  # force fresh load
+
     return HTMLResponse(f"""
     <html>
       <body style='font-family:system-ui'>
         <h3>Input:</h3><p>{text}</p>
 
         <h3>Output video:</h3>
-        <video id="vid" controls width="640">
-          <source src="{rel_url}" type="video/mp4">
+        <video id="vid" controls width="640"
+           src="{rel_url}?v={cache_bust}"
+           preload="metadata">
           Your browser does not support MP4 playback.
         </video>
 
         <p><a id="dl" href="{rel_url}" download>Download video</a></p>
 
         <script>
+          // Log the URL we’re trying to play (helps you confirm in the console)
+          console.log("Playing:", "{rel_url}?v={cache_bust}");
           // Auto-start download once the page renders
           (function () {{
             const a = document.getElementById('dl');
