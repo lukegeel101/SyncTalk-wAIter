@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import time
 import uvicorn
 import tempfile
+import threading
 
 app = FastAPI()
 
@@ -37,8 +38,8 @@ print("[BOOT] WORKSPACE:", WORKSPACE, "exists:", WORKSPACE.is_dir())
 # Mount directories for serving files
 if os.path.exists("demo"):
     app.mount("/demo", StaticFiles(directory="demo"), name="demo")
-if os.path.exists("results"):
-    app.mount("/results", StaticFiles(directory="results"), name="results")
+if RESULTS_DIR.exists():
+    app.mount("/results", StaticFiles(directory=str(RESULTS_DIR)), name="results")
 
 # Create results directory if it doesn't exist
 os.makedirs("results", exist_ok=True)
@@ -120,32 +121,39 @@ def ensure_assets():
     print("[BOOT] DATA_ROOT exists:", DATA_ROOT.is_dir(), DATA_ROOT)
     print("[BOOT] WORKSPACE exists:", WORKSPACE.is_dir(), WORKSPACE)
 
+# Store active tasks
+active_tasks = {}
+
 def generate_video_background(task_id, audio_path):
     """Background task for video generation"""
     try:
         # Update progress
         active_tasks[task_id]["progress"] = 10
         active_tasks[task_id]["message"] = "Processing audio..."
+        time.sleep(1)  # Give UI time to update
         
-        # Run SyncTalk generation
-        output_path = f"results/output_{task_id}.mp4"
+        # Ensure assets are ready
+        ensure_assets()
         
-        # Simulate different progress stages
         active_tasks[task_id]["progress"] = 30
         active_tasks[task_id]["message"] = "Generating facial expressions..."
         
+        # Run SyncTalk generation
         cmd = [
-            "python3.8", "main.py", "data/May",
-            "--workspace", "model/trial_may",
+            sys.executable, str(PROJECT_ROOT / "main.py"),
+            str(DATA_ROOT),
+            "--workspace", str(WORKSPACE),
             "-O", "--test", "--test_train",
             "--asr_model", "ave",
             "--portrait",
-            "--aud", audio_path,
-            "--output", output_path
+            "--aud", audio_path
         ]
         
-        # Run the actual command
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        # Ensure imports resolve
+        child_env = os.environ.copy()
+        child_env["PYTHONPATH"] = f"{PROJECT_ROOT}:{child_env.get('PYTHONPATH','')}"
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, env=child_env)
         
         active_tasks[task_id]["progress"] = 80
         active_tasks[task_id]["message"] = "Finalizing video..."
@@ -154,16 +162,15 @@ def generate_video_background(task_id, audio_path):
             raise Exception(f"Generation failed: {result.stderr}")
         
         # Find the generated video
-        import glob
-        video_files = glob.glob(f"model/trial_may/results/*_vocal.mp4")
+        video_files = list(RESULTS_DIR.glob("*_audio.mp4"))
+        video_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        
         if video_files:
-            # Copy to results directory
-            shutil.copy(video_files[-1], output_path)
-            
+            # The video is already in RESULTS_DIR, just update the URL
             active_tasks[task_id]["status"] = "completed"
             active_tasks[task_id]["progress"] = 100
             active_tasks[task_id]["message"] = "Video generated successfully"
-            active_tasks[task_id]["video_url"] = f"/results/{os.path.basename(output_path)}"
+            active_tasks[task_id]["video_url"] = f"/results/{video_files[0].name}"
         else:
             raise Exception("No output video found")
             
@@ -173,44 +180,92 @@ def generate_video_background(task_id, audio_path):
     finally:
         # Clean up temp file
         if os.path.exists(audio_path):
-            os.remove(audio_path)
+            try:
+                os.remove(audio_path)
+            except:
+                pass
 
-# Store active tasks
-active_tasks = {}
-
-@app.post("/generate-async")
-async def generate_async(token: str = Form(...), wav: UploadFile = File(...)):
-    """Start async video generation and return task ID"""
-    
-    if token != "supersecrettoken":
-        raise HTTPException(status_code=401, detail="Invalid token")
-    
-    # Generate unique task ID
-    task_id = str(uuid.uuid4())
-    
-    # Save uploaded file
-    temp_audio_path = f"temp_uploads/{task_id}_audio.wav"
-    with open(temp_audio_path, "wb") as f:
-        f.write(await wav.read())
-    
-    # Initialize task status
-    active_tasks[task_id] = {
-        "status": "processing",
-        "progress": 0,
-        "message": "Starting video generation...",
-        "video_url": None
-    }
-    
-    # Start generation in background (you'd normally use asyncio.create_task or threading)
-    import threading
-    thread = threading.Thread(target=generate_video_background, args=(task_id, temp_audio_path))
-    thread.start()
-    
-    return {"task_id": task_id, "status": "started"}
+@app.get("/")
+async def root():
+    """Home page with options"""
+    return HTMLResponse("""
+    <html>
+        <head>
+            <title>SyncTalk Video Generator</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    max-width: 1200px;
+                    margin: 0 auto;
+                    padding: 20px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    min-height: 100vh;
+                }
+                .container {
+                    background: white;
+                    border-radius: 10px;
+                    padding: 30px;
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                }
+                h1 {
+                    color: #333;
+                    text-align: center;
+                }
+                .button-group {
+                    display: flex;
+                    gap: 20px;
+                    justify-content: center;
+                    margin-top: 30px;
+                }
+                .btn {
+                    padding: 15px 30px;
+                    font-size: 18px;
+                    border: none;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    text-decoration: none;
+                    display: inline-block;
+                    transition: transform 0.2s, box-shadow 0.2s;
+                    text-align: center;
+                }
+                .btn-primary {
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                }
+                .btn-secondary {
+                    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                    color: white;
+                }
+                .btn:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🎭 SyncTalk Video Generator</h1>
+                <p style="text-align: center; color: #666; font-size: 18px;">
+                    Choose your preferred interface for generating talking face videos
+                </p>
+                <div class="button-group">
+                    <a href="/generate-page" class="btn btn-primary">
+                        📄 Classic Mode<br>
+                        <small style="font-size: 12px;">(New page for each video)</small>
+                    </a>
+                    <a href="/live" class="btn btn-secondary">
+                        🔄 Live Mode<br>
+                        <small style="font-size: 12px;">(Update video in-place)</small>
+                    </a>
+                </div>
+            </div>
+        </body>
+    </html>
+    """)
 
 @app.get("/generate-page")
 async def generate_page():
-    """Classic generation page (original functionality)"""
+    """Classic generation page"""
     return HTMLResponse("""
     <html>
         <head>
@@ -365,9 +420,6 @@ async def live_page():
                     outline: none;
                     border-color: #667eea;
                 }
-                .file-input-wrapper {
-                    position: relative;
-                }
                 .file-info {
                     margin-top: 5px;
                     font-size: 14px;
@@ -467,17 +519,21 @@ async def live_page():
                     background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
                     width: 0%;
                     transition: width 0.3s;
-                    animation: shimmer 2s infinite;
-                }
-                @keyframes shimmer {
-                    0% { opacity: 0.8; }
-                    50% { opacity: 1; }
-                    100% { opacity: 0.8; }
                 }
                 @media (max-width: 768px) {
                     .main-content {
                         grid-template-columns: 1fr;
                     }
+                }
+                .back-link {
+                    display: block;
+                    text-align: center;
+                    margin-top: 20px;
+                    color: white;
+                    text-decoration: none;
+                }
+                .back-link:hover {
+                    text-decoration: underline;
                 }
             </style>
         </head>
@@ -494,10 +550,8 @@ async def live_page():
                         <form id="uploadForm">
                             <div class="form-group">
                                 <label for="audioFile">🎵 Audio File (WAV)</label>
-                                <div class="file-input-wrapper">
-                                    <input type="file" id="audioFile" accept=".wav" required>
-                                    <div class="file-info" id="audioInfo"></div>
-                                </div>
+                                <input type="file" id="audioFile" accept=".wav" required>
+                                <div class="file-info" id="audioInfo"></div>
                             </div>
                             
                             <div class="form-group">
@@ -535,6 +589,8 @@ async def live_page():
                         <div id="videoStatus" style="margin-top: 15px; text-align: center; color: #666;"></div>
                     </div>
                 </div>
+                
+                <a href="/" class="back-link">← Back to Home</a>
             </div>
             
             <script>
@@ -563,8 +619,11 @@ async def live_page():
                     if (type === 'processing') {
                         statusBar.innerHTML = '<span class="loading-spinner"></span>' + message;
                         if (message.includes('%')) {
-                            statusBar.innerHTML += '<div class="progress-bar"><div class="progress-fill" style="width: ' + 
-                                                   message.match(/\\d+/)[0] + '%"></div></div>';
+                            const match = message.match(/\d+/);
+                            if (match) {
+                                statusBar.innerHTML += '<div class="progress-bar"><div class="progress-fill" style="width: ' + 
+                                                       match[0] + '%"></div></div>';
+                            }
                         }
                     } else {
                         statusBar.innerHTML = message;
@@ -633,7 +692,8 @@ async def live_page():
                         });
                         
                         if (!response.ok) {
-                            throw new Error('Failed to start generation');
+                            const error = await response.text();
+                            throw new Error(error || 'Failed to start generation');
                         }
                         
                         const data = await response.json();
@@ -654,82 +714,42 @@ async def live_page():
     </html>
     """)
 
-@app.get("/")
-async def root():
-    """Redirect to the live update page"""
-    return HTMLResponse("""
-    <html>
-        <head>
-            <title>SyncTalk Video Generator</title>
-            <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    max-width: 1200px;
-                    margin: 0 auto;
-                    padding: 20px;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    min-height: 100vh;
-                }
-                .container {
-                    background: white;
-                    border-radius: 10px;
-                    padding: 30px;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-                }
-                h1 {
-                    color: #333;
-                    text-align: center;
-                }
-                .button-group {
-                    display: flex;
-                    gap: 20px;
-                    justify-content: center;
-                    margin-top: 30px;
-                }
-                .btn {
-                    padding: 15px 30px;
-                    font-size: 18px;
-                    border: none;
-                    border-radius: 5px;
-                    cursor: pointer;
-                    text-decoration: none;
-                    display: inline-block;
-                    transition: transform 0.2s, box-shadow 0.2s;
-                }
-                .btn-primary {
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                }
-                .btn-secondary {
-                    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-                    color: white;
-                }
-                .btn:hover {
-                    transform: translateY(-2px);
-                    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-                }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>🎭 SyncTalk Video Generator</h1>
-                <p style="text-align: center; color: #666; font-size: 18px;">
-                    Choose your preferred interface for generating talking face videos
-                </p>
-                <div class="button-group">
-                    <a href="/generate-page" class="btn btn-primary">
-                        📄 Classic Mode<br>
-                        <small style="font-size: 12px;">(New page for each video)</small>
-                    </a>
-                    <a href="/live" class="btn btn-secondary">
-                        🔄 Live Mode<br>
-                        <small style="font-size: 12px;">(Update video in-place)</small>
-                    </a>
-                </div>
-            </div>
-        </body>
-    </html>
-    """)
+@app.post("/generate-async")
+async def generate_async(token: str = Form(...), wav: UploadFile = File(...)):
+    """Start async video generation and return task ID"""
+    
+    if token != "supersecrettoken":
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    # Generate unique task ID
+    task_id = str(uuid.uuid4())
+    
+    # Save uploaded file
+    temp_audio_path = f"temp_uploads/{task_id}_audio.wav"
+    with open(temp_audio_path, "wb") as f:
+        f.write(await wav.read())
+    
+    # Initialize task status
+    active_tasks[task_id] = {
+        "status": "processing",
+        "progress": 0,
+        "message": "Starting video generation...",
+        "video_url": None
+    }
+    
+    # Start generation in background
+    thread = threading.Thread(target=generate_video_background, args=(task_id, temp_audio_path))
+    thread.start()
+    
+    return {"task_id": task_id, "status": "started"}
+
+@app.get("/status/{task_id}")
+async def check_status(task_id: str):
+    """Check the status of a generation task"""
+    if task_id not in active_tasks:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    return active_tasks[task_id]
 
 @app.post("/render")
 async def render(token: str = Form(...), wav: UploadFile = File(...)):
@@ -744,42 +764,36 @@ async def render(token: str = Form(...), wav: UploadFile = File(...)):
         f.write(await wav.read())
     
     try:
+        ensure_assets()
+        
         # Run SyncTalk generation
         cmd = [
-            "python3.8", "main.py", "data/May",
-            "--workspace", "model/trial_may",
+            sys.executable, str(PROJECT_ROOT / "main.py"),
+            str(DATA_ROOT),
+            "--workspace", str(WORKSPACE),
             "-O", "--test", "--test_train",
             "--asr_model", "ave",
             "--portrait",
             "--aud", temp_audio_path
         ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        # Ensure imports resolve
+        child_env = os.environ.copy()
+        child_env["PYTHONPATH"] = f"{PROJECT_ROOT}:{child_env.get('PYTHONPATH','')}"
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, env=child_env)
         
         if result.returncode != 0:
             raise HTTPException(status_code=500, detail=f"Generation failed: {result.stderr}")
         
         # Find and return the generated video
-        import glob
-        video_files = glob.glob("model/trial_may/results/*_vocal.mp4")
-        
-        if video_files:
-            return FileResponse(video_files[-1], media_type="video/mp4")
-        else:
-            raise HTTPException(status_code=500, detail="No output video found")
+        out_path = latest_audio_mp4(RESULTS_DIR)
+        return FileResponse(str(out_path), media_type="video/mp4")
             
     finally:
         # Clean up
         if os.path.exists(temp_audio_path):
             os.remove(temp_audio_path)
-
-@app.get("/status/{task_id}")
-async def check_status(task_id: str):
-    """Check the status of a generation task"""
-    if task_id not in active_tasks:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    return active_tasks[task_id]
 
 @app.post("/generate")
 def generate(text: str = Form(...)):
@@ -822,8 +836,6 @@ def generate(text: str = Form(...)):
     
     subprocess.run(cmd, check=True, env=child_env)
 
-    #subprocess.run(shlex.split(cmd), check=True)
-
     out_path = latest_audio_mp4(RESULTS_DIR)
     rel_url = f"/results/{out_path.name}"
     cache_bust = uuid.uuid4().hex  # force fresh load
@@ -843,7 +855,7 @@ def generate(text: str = Form(...)):
         <p><a id="dl" href="{rel_url}" download>Download video</a></p>
 
         <script>
-          // Log the URL we’re trying to play (helps you confirm in the console)
+          // Log the URL we're trying to play (helps you confirm in the console)
           console.log("Playing:", "{rel_url}?v={cache_bust}");
           // Auto-start download once the page renders
           (function () {{
