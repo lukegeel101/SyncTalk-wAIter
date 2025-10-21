@@ -465,7 +465,7 @@ async def generate_page():
 
 @app.get("/live")
 async def live_page():
-    """Live update page where video updates in-place via ChatGPT->TTS pipeline"""
+    """Live update page with ChatGPT→TTS and scrollable menu"""
     return HTMLResponse("""
     <html>
         <head>
@@ -481,17 +481,36 @@ async def live_page():
                 .header { text-align: center; color: white; margin-bottom: 30px; }
                 .header h1 { font-size: 2.5em; margin-bottom: 10px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
                 .main-content { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 20px; }
+
                 .panel {
                     background: white; border-radius: 15px; padding: 25px;
                     box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                    display: flex; flex-direction: column;
                 }
-                .menu-section h3 { color: #333; margin-bottom: 20px; font-size: 1.5em; text-align: center; }
-                .menu-item {
+
+                /* Scrollable menu container */
+                .menu-section {
+                    max-height: 50vh;               /* Takes only half the screen height */
+                    overflow-y: auto;               /* Make it scrollable */
+                    padding-right: 10px;
                     margin-bottom: 20px;
-                    border: 1px solid #e5e5e5;
+                    border: 1px solid #eee;
                     border-radius: 10px;
-                    padding: 14px 12px;
                     background: #fafafa;
+                }
+
+                .menu-section h3 {
+                    color: #333; margin: 10px 0 15px; font-size: 1.4em;
+                    text-align: center; position: sticky; top: 0;
+                    background: #fafafa; padding: 8px 0; z-index: 5;
+                }
+
+                .menu-item {
+                    margin-bottom: 15px;
+                    border: 1px solid #e5e5e5;
+                    border-radius: 8px;
+                    padding: 12px;
+                    background: #fff;
                     transition: box-shadow 0.15s ease;
                 }
                 .menu-item:hover { box-shadow: 0 0 0 3px rgba(102,126,234,0.3); }
@@ -501,7 +520,10 @@ async def live_page():
                 }
                 .menu-item p { margin: 0; color: #555; font-size: 0.95rem; line-height: 1.4; }
 
-                .form-section h2 { color: #333; margin: 25px 0 15px; font-size: 1.4em; text-align: center; }
+                .form-section h2 {
+                    color: #333; margin: 10px 0 15px; font-size: 1.4em; text-align: center;
+                }
+
                 .form-group { margin-bottom: 20px; }
                 .form-group label { display: block; margin-bottom: 8px; color: #555; font-weight: 500; }
                 .form-group textarea, .form-group input[type="text"] {
@@ -509,14 +531,17 @@ async def live_page():
                     font-size: 16px; transition: border-color 0.3s; resize: vertical; min-height: 120px;
                 }
                 .form-group textarea:focus, .form-group input:focus { outline: none; border-color: #667eea; }
+
                 .generate-btn {
                     width: 100%; padding: 15px;
                     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white; border: none; border-radius: 8px; font-size: 18px; font-weight: 600;
+                    color: white; border: none; border-radius: 8px;
+                    font-size: 18px; font-weight: 600;
                     cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
                 }
                 .generate-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(102,126,234,0.4); }
                 .generate-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+
                 .status-bar {
                     margin-top: 15px; padding: 10px; background: #f0f0f0;
                     border-radius: 8px; text-align: center; font-size: 14px;
@@ -530,6 +555,7 @@ async def live_page():
                     border-top-color: #667eea; animation: spin 1s ease-in-out infinite;
                 }
                 @keyframes spin { to { transform: rotate(360deg); } }
+
                 .video-section { position: relative; }
                 .video-container {
                     background: #f5f5f5; border-radius: 10px; padding: 20px;
@@ -538,7 +564,9 @@ async def live_page():
                 video { width: 100%; max-width: 100%; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
                 .placeholder { text-align: center; color: #999; }
                 .placeholder svg { width: 100px; height: 100px; margin-bottom: 20px; opacity: 0.3; }
+
                 @media (max-width: 768px) { .main-content { grid-template-columns: 1fr; } }
+
                 .back-link { display: block; text-align: center; margin-top: 20px; color: white; text-decoration: none; }
                 .back-link:hover { text-decoration: underline; }
                 .generated-text { margin-top: 10px; font-size: 14px; color: #555; text-align: center; }
@@ -547,14 +575,14 @@ async def live_page():
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>wAIter</h1>
-                    <p>Ask your AI waiter questions about the menu, recommendations, etc....</p>
+                    <h1>🎭 SyncTalk Live Mode</h1>
+                    <p>Type a prompt → ChatGPT crafts a reply → we speak it and animate a talking head.</p>
                 </div>
 
                 <div class="main-content">
                     <!-- LEFT PANEL -->
                     <div class="panel form-section">
-                        <!-- Menu Section -->
+                        <!-- Scrollable Menu -->
                         <div class="menu-section">
                             <h3>Today's Menu</h3>
 
@@ -609,14 +637,13 @@ async def live_page():
                 <a href="/" class="back-link">← Back to Home</a>
             </div>
 
+            <!-- JS identical to before -->
             <script>
                 const BASE = new URL(window.location.href);
-
                 const form = document.getElementById('textForm');
                 const promptEl = document.getElementById('prompt');
                 const tokenEl = document.getElementById('token');
                 const btn = document.getElementById('generateBtn');
-
                 const statusBar = document.getElementById('statusBar');
                 const video = document.getElementById('videoPlayer');
                 const placeholder = document.getElementById('videoPlaceholder');
@@ -632,9 +659,7 @@ async def live_page():
                         statusBar.textContent = message;
                     }
                 }
-                function hideStatusSoon() {
-                    setTimeout(() => { statusBar.style.display = 'none'; }, 3000);
-                }
+                function hideStatusSoon() { setTimeout(() => { statusBar.style.display = 'none'; }, 3000); }
 
                 async function pollStatus(taskId) {
                     const interval = setInterval(async () => {
@@ -646,46 +671,30 @@ async def live_page():
                             if (data.status === 'completed') {
                                 clearInterval(interval);
                                 showStatus('Video generated successfully!', 'success');
-
-                                // Update UI: video + generated script text
                                 video.src = data.video_url + '?t=' + Date.now();
                                 video.style.display = 'block';
                                 placeholder.style.display = 'none';
                                 videoStatus.textContent = 'Generated at ' + new Date().toLocaleTimeString();
                                 generatedText.textContent = data.generated_text ? ('🗨️ Script: ' + data.generated_text) : '';
-
-                                btn.disabled = false;
-                                btn.textContent = 'Generate Talking Video';
-                                hideStatusSoon();
+                                btn.disabled = false; btn.textContent = 'Generate Talking Video'; hideStatusSoon();
                             } else if (data.status === 'error') {
                                 clearInterval(interval);
                                 showStatus('Error: ' + data.message, 'error');
-                                btn.disabled = false;
-                                btn.textContent = 'Generate Talking Video';
+                                btn.disabled = false; btn.textContent = 'Generate Talking Video';
                             } else {
                                 showStatus((data.message || 'Processing...') + (data.progress ? (' ' + data.progress + '%') : ''), 'processing');
                             }
-                        } catch (e) {
-                            console.error('Poll error', e);
-                        }
+                        } catch (e) { console.error('Poll error', e); }
                     }, 2000);
                 }
 
                 form.addEventListener('submit', async (e) => {
                     e.preventDefault();
-
                     const prompt = (promptEl.value || '').trim();
-                    if (!prompt) {
-                        showStatus('Please enter a prompt.', 'error');
-                        return;
-                    }
-                    if (!tokenEl.value) {
-                        showStatus('Missing token.', 'error');
-                        return;
-                    }
+                    if (!prompt) { showStatus('Please enter a prompt.', 'error'); return; }
+                    if (!tokenEl.value) { showStatus('Missing token.', 'error'); return; }
 
-                    btn.disabled = true;
-                    btn.textContent = 'Generating...';
+                    btn.disabled = true; btn.textContent = 'Generating...';
                     showStatus('Starting ChatGPT pipeline...', 'processing');
                     generatedText.textContent = '';
 
@@ -693,22 +702,17 @@ async def live_page():
                         const formData = new FormData();
                         formData.append('prompt', prompt);
                         formData.append('token', tokenEl.value);
-
                         const url = new URL('generate-from-text-async', BASE);
                         const res = await fetch(url, { method: 'POST', body: formData });
 
-                        if (!res.ok) {
-                            const t = await res.text();
-                            throw new Error(t || 'Failed to start generation');
-                        }
+                        if (!res.ok) throw new Error(await res.text() || 'Failed to start generation');
                         const data = await res.json();
                         showStatus('Processing...', 'processing');
                         pollStatus(data.task_id);
                     } catch (err) {
                         console.error(err);
                         showStatus('Error: ' + err.message, 'error');
-                        btn.disabled = false;
-                        btn.textContent = 'Generate Talking Video';
+                        btn.disabled = false; btn.textContent = 'Generate Talking Video';
                     }
                 });
             </script>
