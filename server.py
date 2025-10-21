@@ -480,14 +480,28 @@ async def live_page():
                 .container { max-width: 1400px; margin: 0 auto; }
                 .header { text-align: center; color: white; margin-bottom: 30px; }
                 .header h1 { font-size: 2.5em; margin-bottom: 10px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
-                .main-content {
-                    display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 20px;
-                }
+                .main-content { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 20px; }
                 .panel {
                     background: white; border-radius: 15px; padding: 25px;
                     box-shadow: 0 10px 30px rgba(0,0,0,0.2);
                 }
-                .form-section h2 { color: #333; margin-bottom: 20px; font-size: 1.5em; }
+                .menu-section h3 { color: #333; margin-bottom: 20px; font-size: 1.5em; text-align: center; }
+                .menu-item {
+                    margin-bottom: 20px;
+                    border: 1px solid #e5e5e5;
+                    border-radius: 10px;
+                    padding: 14px 12px;
+                    background: #fafafa;
+                    transition: box-shadow 0.15s ease;
+                }
+                .menu-item:hover { box-shadow: 0 0 0 3px rgba(102,126,234,0.3); }
+                .menu-item h4 {
+                    display: flex; justify-content: space-between;
+                    margin: 0 0 6px; font-size: 1.05rem;
+                }
+                .menu-item p { margin: 0; color: #555; font-size: 0.95rem; line-height: 1.4; }
+
+                .form-section h2 { color: #333; margin: 25px 0 15px; font-size: 1.4em; text-align: center; }
                 .form-group { margin-bottom: 20px; }
                 .form-group label { display: block; margin-bottom: 8px; color: #555; font-weight: 500; }
                 .form-group textarea, .form-group input[type="text"] {
@@ -496,26 +510,30 @@ async def live_page():
                 }
                 .form-group textarea:focus, .form-group input:focus { outline: none; border-color: #667eea; }
                 .generate-btn {
-                    width: 100%; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white; border: none; border-radius: 8px; font-size: 18px; font-weight: 600; cursor: pointer;
-                    transition: transform 0.2s, box-shadow 0.2s;
+                    width: 100%; padding: 15px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white; border: none; border-radius: 8px; font-size: 18px; font-weight: 600;
+                    cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
                 }
                 .generate-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(102,126,234,0.4); }
                 .generate-btn:disabled { opacity: 0.7; cursor: not-allowed; }
-                .status-bar { margin-top: 15px; padding: 10px; background: #f0f0f0; border-radius: 8px; text-align: center; font-size: 14px; }
+                .status-bar {
+                    margin-top: 15px; padding: 10px; background: #f0f0f0;
+                    border-radius: 8px; text-align: center; font-size: 14px;
+                }
                 .status-processing { background: #fff3cd; color: #856404; }
                 .status-success { background: #d4edda; color: #155724; }
                 .status-error { background: #f8d7da; color: #721c24; }
                 .loading-spinner {
                     display: inline-block; width: 20px; height: 20px; margin-right: 10px;
-                    border: 3px solid rgba(0,0,0,0.1); border-radius: 50%; border-top-color: #667eea;
-                    animation: spin 1s ease-in-out infinite;
+                    border: 3px solid rgba(0,0,0,0.1); border-radius: 50%;
+                    border-top-color: #667eea; animation: spin 1s ease-in-out infinite;
                 }
                 @keyframes spin { to { transform: rotate(360deg); } }
                 .video-section { position: relative; }
                 .video-container {
-                    background: #f5f5f5; border-radius: 10px; padding: 20px; min-height: 400px;
-                    display: flex; align-items: center; justify-content: center;
+                    background: #f5f5f5; border-radius: 10px; padding: 20px;
+                    min-height: 400px; display: flex; align-items: center; justify-content: center;
                 }
                 video { width: 100%; max-width: 100%; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
                 .placeholder { text-align: center; color: #999; }
@@ -534,20 +552,40 @@ async def live_page():
                 </div>
 
                 <div class="main-content">
-                    <!-- LEFT: Prompt form -->
+                    <!-- LEFT PANEL -->
                     <div class="panel form-section">
+                        <!-- Menu Section -->
+                        <div class="menu-section">
+                            <h3>Today's Menu</h3>
+
+                            <div class="menu-item"><h4>Margherita Pizza <span>$12</span></h4><p>Classic pizza with tomato sauce, mozzarella, and fresh basil leaves.</p></div>
+                            <div class="menu-item"><h4>Grilled Salmon <span>$18</span></h4><p>Perfectly grilled salmon served with lemon butter sauce and roasted vegetables.</p></div>
+                            <div class="menu-item"><h4>Caesar Salad <span>$10</span></h4><p>Crisp romaine lettuce tossed in creamy Caesar dressing with parmesan and croutons.</p></div>
+                            <div class="menu-item"><h4>Spaghetti Carbonara <span>$14</span></h4><p>Rich and creamy pasta with pancetta, egg yolk, and parmesan cheese.</p></div>
+                            <div class="menu-item"><h4>Chocolate Lava Cake <span>$8</span></h4><p>Warm chocolate cake with a molten center, served with vanilla ice cream.</p></div>
+
+                            <div class="menu-item"><h4>Cabernet Sauvignon <span>$9 / glass</span></h4><p>Full-bodied red wine with notes of dark cherry, oak, and a hint of vanilla.</p></div>
+                            <div class="menu-item"><h4>Pinot Grigio <span>$8 / glass</span></h4><p>Crisp white wine offering bright flavors of green apple, pear, and citrus.</p></div>
+                            <div class="menu-item"><h4>Rosé Blend <span>$8 / glass</span></h4><p>Refreshing and light, with aromas of strawberry and watermelon — perfect for summer evenings.</p></div>
+                        </div>
+
+                        <!-- Prompt Form -->
                         <h2>📝 Enter Prompt</h2>
                         <form id="textForm">
                             <div class="form-group">
-                                <label for="prompt">What should wAIter answer?</label>
-                                <textarea id="prompt" placeholder="e.g., Can you tell me more about the lava cake?."></textarea>
+                                <label for="prompt">What should ChatGPT answer (we'll speak the answer)?</label>
+                                <textarea id="prompt" placeholder="e.g., Describe the flavors of each wine on the menu."></textarea>
                             </div>
-                            <button type="submit" class="generate-btn" id="generateBtn">Send</button>
+                            <div class="form-group">
+                                <label for="token">🔐 Authentication Token</label>
+                                <input type="text" id="token" value="supersecrettoken" />
+                            </div>
+                            <button type="submit" class="generate-btn" id="generateBtn">Generate Talking Video</button>
                         </form>
                         <div id="statusBar" class="status-bar" style="display: none;"></div>
                     </div>
 
-                    <!-- RIGHT: Video -->
+                    <!-- RIGHT PANEL: Video -->
                     <div class="panel video-section">
                         <h2>🎬 Generated Video</h2>
                         <div class="video-container">
