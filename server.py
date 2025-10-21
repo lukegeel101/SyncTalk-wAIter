@@ -627,7 +627,7 @@ async def live_page():
                                 <p>Your generated video will appear here</p>
                                 <p style="font-size: 12px; margin-top: 10px;">Type a prompt and click Generate</p>
                             </div>
-                            <video id="videoPlayer" controls style="display: none;"></video>
+                            <video id="videoPlayer" controls autoplay muted style="display: none;"></video>
                         </div>
                         <div id="videoStatus" style="margin-top: 10px; text-align: center; color: #666;"></div>
                         <div id="generatedText" class="generated-text"></div>
@@ -675,6 +675,9 @@ async def live_page():
                                 video.style.display = 'block';
                                 placeholder.style.display = 'none';
                                 videoStatus.textContent = 'Generated at ' + new Date().toLocaleTimeString();
+                                video.autoplay = true;
+                                video.muted = false;  // optional: leave muted if browser blocks autoplay with sound
+                                video.play().catch(err => console.warn('Autoplay blocked:', err));
                                 generatedText.textContent = data.generated_text ? ('🗨️ Script: ' + data.generated_text) : '';
                                 btn.disabled = false; btn.textContent = 'Generate Talking Video'; hideStatusSoon();
                             } else if (data.status === 'error') {
