@@ -8,6 +8,8 @@ import time
 import uvicorn
 import tempfile
 import threading
+import requests
+from fastapi import Body
 
 app = FastAPI()
 
@@ -30,6 +32,9 @@ RESULTS_DIR = WORKSPACE / "results"
 
 DEMO_DIR.mkdir(parents=True, exist_ok=True)
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+
+OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_MODEL   = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # or gpt-4o, gpt-4.1, etc.
 
 print("[BOOT] PROJECT_ROOT:", PROJECT_ROOT)
 print("[BOOT] DATA_ROOT:", DATA_ROOT, "exists:", DATA_ROOT.is_dir())
@@ -184,6 +189,116 @@ def generate_video_background(task_id, audio_path):
                 os.remove(audio_path)
             except:
                 pass
+
+def call_chatgpt(user_prompt: str) -> str:
+    """Call OpenAI Chat Completions API and return the assistant message text."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY not set in environment.")
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": OPENAI_MODEL,
+        "messages": [
+            {"role": "system", "content": "You are a concise, helpful assistant."},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.7,
+    }
+    r = requests.post(OPENAI_API_URL, headers=headers, json=payload, timeout=60)
+    if r.status_code != 200:
+        raise RuntimeError(f"OpenAI API error {r.status_code}: {r.text}")
+    data = r.json()
+    return data["choices"][0]["message"]["content"].strip()
+
+def text_to_wav_gtts(text: str, out_wav_path: str):
+    """Use gTTS -> mp3 -> wav (48k mono 16-bit) via pydub."""
+    from gtts import gTTS
+    from pydub import AudioSegment
+
+    tmp_mp3 = str(Path(out_wav_path).with_suffix(".mp3"))
+    tts = gTTS(text)
+    tts.save(tmp_mp3)
+
+    audio = AudioSegment.from_mp3(tmp_mp3)
+    audio = audio.set_frame_rate(48000).set_channels(1).set_sample_width(2)
+    audio.export(out_wav_path, format="wav")
+    try:
+        os.remove(tmp_mp3)
+    except:
+        pass
+
+def generate_text_video_background(task_id: str, prompt_text: str):
+    """End-to-end: ChatGPT → TTS(WAV) → SyncTalk video (async)."""
+    temp_wav = f"temp_uploads/{task_id}_from_text.wav"
+    try:
+        active_tasks[task_id]["status"] = "processing"
+        active_tasks[task_id]["progress"] = 5
+        active_tasks[task_id]["message"] = "Contacting ChatGPT..."
+        time.sleep(0.5)
+
+        # 1) Get response text from ChatGPT
+        response_text = call_chatgpt(prompt_text)
+
+        active_tasks[task_id]["progress"] = 20
+        active_tasks[task_id]["message"] = "Generating speech audio..."
+        # 2) Convert to WAV with gTTS
+        text_to_wav_gtts(response_text, temp_wav)
+        if not os.path.exists(temp_wav) or os.path.getsize(temp_wav) == 0:
+            raise RuntimeError("TTS failed to create WAV.")
+
+        active_tasks[task_id]["progress"] = 35
+        active_tasks[task_id]["message"] = "Preparing assets..."
+        ensure_assets()
+
+        # 3) Run SyncTalk
+        active_tasks[task_id]["progress"] = 60
+        active_tasks[task_id]["message"] = "Rendering talking head video..."
+
+        cmd = [
+            sys.executable, str(PROJECT_ROOT / "main.py"),
+            str(DATA_ROOT),
+            "--workspace", str(WORKSPACE),
+            "-O", "--test", "--test_train",
+            "--asr_model", "ave",
+            "--portrait",
+            "--aud", temp_wav,
+        ]
+        child_env = os.environ.copy()
+        child_env["PYTHONPATH"] = f"{PROJECT_ROOT}:{child_env.get('PYTHONPATH','')}"
+        result = subprocess.run(cmd, capture_output=True, text=True, env=child_env)
+
+        active_tasks[task_id]["progress"] = 85
+        active_tasks[task_id]["message"] = "Finalizing video..."
+
+        if result.returncode != 0:
+            raise RuntimeError(f"Generation failed: {result.stderr}")
+
+        # 4) Locate output and publish URL
+        video_files = list(RESULTS_DIR.glob("*_audio.mp4"))
+        video_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        if not video_files:
+            raise RuntimeError("No output video found")
+
+        active_tasks[task_id]["status"] = "completed"
+        active_tasks[task_id]["progress"] = 100
+        active_tasks[task_id]["message"] = "Done"
+        active_tasks[task_id]["video_url"] = f"/results/{video_files[0].name}"
+
+        # Optional: also store the generated script if you want to show it later
+        active_tasks[task_id]["generated_text"] = response_text
+
+    except Exception as e:
+        active_tasks[task_id]["status"] = "error"
+        active_tasks[task_id]["message"] = str(e)
+    finally:
+        try:
+            if os.path.exists(temp_wav):
+                os.remove(temp_wav)
+        except:
+            pass
 
 @app.get("/")
 async def root():
@@ -350,223 +465,93 @@ async def generate_page():
 
 @app.get("/live")
 async def live_page():
-    """Live update page where video updates in-place"""
+    """Live update page where video updates in-place via ChatGPT->TTS pipeline"""
     return HTMLResponse("""
     <html>
         <head>
-            <title>SyncTalk - Live Mode</title>
+            <title>SyncTalk - Live Mode (ChatGPT → TTS)</title>
             <style>
-                * {
-                    margin: 0;
-                    padding: 0;
-                    box-sizing: border-box;
-                }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
                 body {
                     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    min-height: 100vh;
-                    padding: 20px;
+                    min-height: 100vh; padding: 20px;
                 }
-                .container {
-                    max-width: 1400px;
-                    margin: 0 auto;
-                }
-                .header {
-                    text-align: center;
-                    color: white;
-                    margin-bottom: 30px;
-                }
-                .header h1 {
-                    font-size: 2.5em;
-                    margin-bottom: 10px;
-                    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-                }
+                .container { max-width: 1400px; margin: 0 auto; }
+                .header { text-align: center; color: white; margin-bottom: 30px; }
+                .header h1 { font-size: 2.5em; margin-bottom: 10px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
                 .main-content {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 30px;
-                    margin-bottom: 20px;
+                    display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 20px;
                 }
                 .panel {
-                    background: white;
-                    border-radius: 15px;
-                    padding: 25px;
+                    background: white; border-radius: 15px; padding: 25px;
                     box-shadow: 0 10px 30px rgba(0,0,0,0.2);
                 }
-                .form-section h2 {
-                    color: #333;
-                    margin-bottom: 20px;
-                    font-size: 1.5em;
+                .form-section h2 { color: #333; margin-bottom: 20px; font-size: 1.5em; }
+                .form-group { margin-bottom: 20px; }
+                .form-group label { display: block; margin-bottom: 8px; color: #555; font-weight: 500; }
+                .form-group textarea, .form-group input[type="text"] {
+                    width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px;
+                    font-size: 16px; transition: border-color 0.3s; resize: vertical; min-height: 120px;
                 }
-                .form-group {
-                    margin-bottom: 20px;
-                }
-                .form-group label {
-                    display: block;
-                    margin-bottom: 8px;
-                    color: #555;
-                    font-weight: 500;
-                }
-                .form-group input[type="file"],
-                .form-group input[type="text"] {
-                    width: 100%;
-                    padding: 12px;
-                    border: 2px solid #e0e0e0;
-                    border-radius: 8px;
-                    font-size: 16px;
-                    transition: border-color 0.3s;
-                }
-                .form-group input:focus {
-                    outline: none;
-                    border-color: #667eea;
-                }
-                .file-info {
-                    margin-top: 5px;
-                    font-size: 14px;
-                    color: #666;
-                }
+                .form-group textarea:focus, .form-group input:focus { outline: none; border-color: #667eea; }
                 .generate-btn {
-                    width: 100%;
-                    padding: 15px;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                    border: none;
-                    border-radius: 8px;
-                    font-size: 18px;
-                    font-weight: 600;
-                    cursor: pointer;
+                    width: 100%; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white; border: none; border-radius: 8px; font-size: 18px; font-weight: 600; cursor: pointer;
                     transition: transform 0.2s, box-shadow 0.2s;
                 }
-                .generate-btn:hover:not(:disabled) {
-                    transform: translateY(-2px);
-                    box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
-                }
-                .generate-btn:disabled {
-                    opacity: 0.7;
-                    cursor: not-allowed;
-                }
-                .video-section {
-                    position: relative;
-                }
-                .video-container {
-                    background: #f5f5f5;
-                    border-radius: 10px;
-                    padding: 20px;
-                    min-height: 400px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                }
-                video {
-                    width: 100%;
-                    max-width: 100%;
-                    border-radius: 8px;
-                    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-                }
-                .placeholder {
-                    text-align: center;
-                    color: #999;
-                }
-                .placeholder svg {
-                    width: 100px;
-                    height: 100px;
-                    margin-bottom: 20px;
-                    opacity: 0.3;
-                }
-                .status-bar {
-                    margin-top: 15px;
-                    padding: 10px;
-                    background: #f0f0f0;
-                    border-radius: 8px;
-                    text-align: center;
-                    font-size: 14px;
-                }
-                .status-processing {
-                    background: #fff3cd;
-                    color: #856404;
-                }
-                .status-success {
-                    background: #d4edda;
-                    color: #155724;
-                }
-                .status-error {
-                    background: #f8d7da;
-                    color: #721c24;
-                }
+                .generate-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(102,126,234,0.4); }
+                .generate-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+                .status-bar { margin-top: 15px; padding: 10px; background: #f0f0f0; border-radius: 8px; text-align: center; font-size: 14px; }
+                .status-processing { background: #fff3cd; color: #856404; }
+                .status-success { background: #d4edda; color: #155724; }
+                .status-error { background: #f8d7da; color: #721c24; }
                 .loading-spinner {
-                    display: inline-block;
-                    width: 20px;
-                    height: 20px;
-                    margin-right: 10px;
-                    border: 3px solid rgba(0,0,0,0.1);
-                    border-radius: 50%;
-                    border-top-color: #667eea;
+                    display: inline-block; width: 20px; height: 20px; margin-right: 10px;
+                    border: 3px solid rgba(0,0,0,0.1); border-radius: 50%; border-top-color: #667eea;
                     animation: spin 1s ease-in-out infinite;
                 }
-                @keyframes spin {
-                    to { transform: rotate(360deg); }
+                @keyframes spin { to { transform: rotate(360deg); } }
+                .video-section { position: relative; }
+                .video-container {
+                    background: #f5f5f5; border-radius: 10px; padding: 20px; min-height: 400px;
+                    display: flex; align-items: center; justify-content: center;
                 }
-                .progress-bar {
-                    width: 100%;
-                    height: 6px;
-                    background: #e0e0e0;
-                    border-radius: 3px;
-                    overflow: hidden;
-                    margin-top: 10px;
-                }
-                .progress-fill {
-                    height: 100%;
-                    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-                    width: 0%;
-                    transition: width 0.3s;
-                }
-                @media (max-width: 768px) {
-                    .main-content {
-                        grid-template-columns: 1fr;
-                    }
-                }
-                .back-link {
-                    display: block;
-                    text-align: center;
-                    margin-top: 20px;
-                    color: white;
-                    text-decoration: none;
-                }
-                .back-link:hover {
-                    text-decoration: underline;
-                }
+                video { width: 100%; max-width: 100%; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+                .placeholder { text-align: center; color: #999; }
+                .placeholder svg { width: 100px; height: 100px; margin-bottom: 20px; opacity: 0.3; }
+                @media (max-width: 768px) { .main-content { grid-template-columns: 1fr; } }
+                .back-link { display: block; text-align: center; margin-top: 20px; color: white; text-decoration: none; }
+                .back-link:hover { text-decoration: underline; }
+                .generated-text { margin-top: 10px; font-size: 14px; color: #555; text-align: center; }
             </style>
         </head>
         <body>
             <div class="container">
                 <div class="header">
                     <h1>🎭 SyncTalk Live Mode</h1>
-                    <p>Generate talking face videos with real-time updates</p>
+                    <p>Type a prompt → ChatGPT crafts a reply → we speak it and animate a talking head.</p>
                 </div>
-                
+
                 <div class="main-content">
+                    <!-- LEFT: Prompt form -->
                     <div class="panel form-section">
-                        <h2>📤 Upload Files</h2>
-                        <form id="uploadForm">
+                        <h2>📝 Enter Prompt</h2>
+                        <form id="textForm">
                             <div class="form-group">
-                                <label for="audioFile">🎵 Audio File (WAV)</label>
-                                <input type="file" id="audioFile" accept=".wav" required>
-                                <div class="file-info" id="audioInfo"></div>
+                                <label for="prompt">What should ChatGPT answer (we'll speak the answer)?</label>
+                                <textarea id="prompt" placeholder="e.g., Explain how attention works in transformers in two sentences."></textarea>
                             </div>
-                            
                             <div class="form-group">
                                 <label for="token">🔐 Authentication Token</label>
-                                <input type="text" id="token" placeholder="Enter your token" value="supersecrettoken" required>
+                                <input type="text" id="token" value="supersecrettoken" />
                             </div>
-                            
-                            <button type="submit" class="generate-btn" id="generateBtn">
-                                Generate Video
-                            </button>
+                            <button type="submit" class="generate-btn" id="generateBtn">Generate Talking Video</button>
                         </form>
-                        
                         <div id="statusBar" class="status-bar" style="display: none;"></div>
                     </div>
-                    
+
+                    <!-- RIGHT: Video -->
                     <div class="panel video-section">
                         <h2>🎬 Generated Video</h2>
                         <div class="video-container">
@@ -576,137 +561,120 @@ async def live_page():
                                     <line x1="7" y1="2" x2="7" y2="22"></line>
                                     <line x1="17" y1="2" x2="17" y2="22"></line>
                                     <line x1="2" y1="12" x2="22" y2="12"></line>
-                                    <line x1="2" y1="7" x2="7" y2="7"></line>
-                                    <line x1="2" y1="17" x2="7" y2="17"></line>
-                                    <line x1="17" y1="17" x2="22" y2="17"></line>
-                                    <line x1="17" y1="7" x2="22" y2="7"></line>
                                 </svg>
                                 <p>Your generated video will appear here</p>
-                                <p style="font-size: 12px; margin-top: 10px;">Upload an audio file to get started</p>
+                                <p style="font-size: 12px; margin-top: 10px;">Type a prompt and click Generate</p>
                             </div>
                             <video id="videoPlayer" controls style="display: none;"></video>
                         </div>
-                        <div id="videoStatus" style="margin-top: 15px; text-align: center; color: #666;"></div>
+                        <div id="videoStatus" style="margin-top: 10px; text-align: center; color: #666;"></div>
+                        <div id="generatedText" class="generated-text"></div>
                     </div>
                 </div>
-                
+
                 <a href="/" class="back-link">← Back to Home</a>
             </div>
-            
+
             <script>
-                const form = document.getElementById('uploadForm');
-                const audioFile = document.getElementById('audioFile');
-                const audioInfo = document.getElementById('audioInfo');
-                const generateBtn = document.getElementById('generateBtn');
+                const BASE = new URL(window.location.href);
+
+                const form = document.getElementById('textForm');
+                const promptEl = document.getElementById('prompt');
+                const tokenEl = document.getElementById('token');
+                const btn = document.getElementById('generateBtn');
+
                 const statusBar = document.getElementById('statusBar');
-                const videoPlayer = document.getElementById('videoPlayer');
-                const videoPlaceholder = document.getElementById('videoPlaceholder');
+                const video = document.getElementById('videoPlayer');
+                const placeholder = document.getElementById('videoPlaceholder');
                 const videoStatus = document.getElementById('videoStatus');
-                
-                audioFile.addEventListener('change', (e) => {
-                    if (e.target.files[0]) {
-                        const file = e.target.files[0];
-                        const sizeMB = (file.size / 1024 / 1024).toFixed(2);
-                        audioInfo.textContent = `Selected: ${file.name} (${sizeMB} MB)`;
-                    } else {
-                        audioInfo.textContent = '';
-                    }
-                });
-                
-                function showStatus(message, type = 'processing') {
+                const generatedText = document.getElementById('generatedText');
+
+                function showStatus(message, type='processing') {
                     statusBar.style.display = 'block';
                     statusBar.className = 'status-bar status-' + type;
                     if (type === 'processing') {
                         statusBar.innerHTML = '<span class="loading-spinner"></span>' + message;
-                        if (message.includes('%')) {
-                            const match = message.match(/\d+/);
-                            if (match) {
-                                statusBar.innerHTML += '<div class="progress-bar"><div class="progress-fill" style="width: ' + 
-                                                       match[0] + '%"></div></div>';
-                            }
-                        }
                     } else {
-                        statusBar.innerHTML = message;
+                        statusBar.textContent = message;
                     }
                 }
-                
-                function hideStatus() {
-                    setTimeout(() => {
-                        statusBar.style.display = 'none';
-                    }, 3000);
+                function hideStatusSoon() {
+                    setTimeout(() => { statusBar.style.display = 'none'; }, 3000);
                 }
-                
+
                 async function pollStatus(taskId) {
-                    const checkInterval = setInterval(async () => {
+                    const interval = setInterval(async () => {
                         try {
-                            const response = await fetch(`/status/${taskId}`);
-                            const data = await response.json();
-                            
+                            const url = new URL('status/' + taskId, BASE);
+                            const res = await fetch(url);
+                            const data = await res.json();
+
                             if (data.status === 'completed') {
-                                clearInterval(checkInterval);
+                                clearInterval(interval);
                                 showStatus('Video generated successfully!', 'success');
-                                
-                                // Update video source
-                                videoPlayer.src = data.video_url + '?t=' + Date.now();
-                                videoPlayer.style.display = 'block';
-                                videoPlaceholder.style.display = 'none';
+
+                                // Update UI: video + generated script text
+                                video.src = data.video_url + '?t=' + Date.now();
+                                video.style.display = 'block';
+                                placeholder.style.display = 'none';
                                 videoStatus.textContent = 'Generated at ' + new Date().toLocaleTimeString();
-                                
-                                generateBtn.disabled = false;
-                                generateBtn.textContent = 'Generate Video';
-                                hideStatus();
+                                generatedText.textContent = data.generated_text ? ('🗨️ Script: ' + data.generated_text) : '';
+
+                                btn.disabled = false;
+                                btn.textContent = 'Generate Talking Video';
+                                hideStatusSoon();
                             } else if (data.status === 'error') {
-                                clearInterval(checkInterval);
+                                clearInterval(interval);
                                 showStatus('Error: ' + data.message, 'error');
-                                generateBtn.disabled = false;
-                                generateBtn.textContent = 'Generate Video';
+                                btn.disabled = false;
+                                btn.textContent = 'Generate Talking Video';
                             } else {
-                                showStatus(data.message || 'Processing... ' + data.progress + '%', 'processing');
+                                showStatus((data.message || 'Processing...') + (data.progress ? (' ' + data.progress + '%') : ''), 'processing');
                             }
-                        } catch (error) {
-                            console.error('Status check error:', error);
+                        } catch (e) {
+                            console.error('Poll error', e);
                         }
                     }, 2000);
                 }
-                
+
                 form.addEventListener('submit', async (e) => {
                     e.preventDefault();
-                    
-                    if (!audioFile.files[0]) {
-                        showStatus('Please select an audio file', 'error');
+
+                    const prompt = (promptEl.value || '').trim();
+                    if (!prompt) {
+                        showStatus('Please enter a prompt.', 'error');
                         return;
                     }
-                    
-                    const formData = new FormData();
-                    formData.append('wav', audioFile.files[0]);
-                    formData.append('token', document.getElementById('token').value);
-                    
-                    generateBtn.disabled = true;
-                    generateBtn.textContent = 'Generating...';
-                    showStatus('Uploading audio file...', 'processing');
-                    
+                    if (!tokenEl.value) {
+                        showStatus('Missing token.', 'error');
+                        return;
+                    }
+
+                    btn.disabled = true;
+                    btn.textContent = 'Generating...';
+                    showStatus('Starting ChatGPT pipeline...', 'processing');
+                    generatedText.textContent = '';
+
                     try {
-                        const response = await fetch('/generate-async', {
-                            method: 'POST',
-                            body: formData
-                        });
-                        
-                        if (!response.ok) {
-                            const error = await response.text();
-                            throw new Error(error || 'Failed to start generation');
+                        const formData = new FormData();
+                        formData.append('prompt', prompt);
+                        formData.append('token', tokenEl.value);
+
+                        const url = new URL('generate-from-text-async', BASE);
+                        const res = await fetch(url, { method: 'POST', body: formData });
+
+                        if (!res.ok) {
+                            const t = await res.text();
+                            throw new Error(t || 'Failed to start generation');
                         }
-                        
-                        const data = await response.json();
-                        showStatus('Processing video... 0%', 'processing');
-                        
-                        // Start polling for status
+                        const data = await res.json();
+                        showStatus('Processing...', 'processing');
                         pollStatus(data.task_id);
-                        
-                    } catch (error) {
-                        console.error('Error:', error);
-                        showStatus('Error: ' + error.message, 'error');
-                        generateBtn.disabled = false;
-                        generateBtn.textContent = 'Generate Video';
+                    } catch (err) {
+                        console.error(err);
+                        showStatus('Error: ' + err.message, 'error');
+                        btn.disabled = false;
+                        btn.textContent = 'Generate Talking Video';
                     }
                 });
             </script>
@@ -741,6 +709,33 @@ async def generate_async(token: str = Form(...), wav: UploadFile = File(...)):
     thread = threading.Thread(target=generate_video_background, args=(task_id, temp_audio_path))
     thread.start()
     
+    return {"task_id": task_id, "status": "started"}
+
+@app.post("/generate-from-text-async")
+async def generate_from_text_async(
+    token: str = Form(...),
+    prompt: str = Form(...)
+):
+    """Start async ChatGPT->TTS->Video generation and return task ID."""
+    if token != "supersecrettoken":
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    if not prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt cannot be empty")
+
+    task_id = str(uuid.uuid4())
+
+    active_tasks[task_id] = {
+        "status": "processing",
+        "progress": 0,
+        "message": "Starting ChatGPT pipeline...",
+        "video_url": None,
+        "generated_text": None,
+    }
+
+    thread = threading.Thread(target=generate_text_video_background, args=(task_id, prompt))
+    thread.start()
+
     return {"task_id": task_id, "status": "started"}
 
 @app.get("/status/{task_id}")
