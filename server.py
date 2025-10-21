@@ -249,11 +249,11 @@ async def root():
                     Choose your preferred interface for generating talking face videos
                 </p>
                 <div class="button-group">
-                    <a href="/generate-page" class="btn btn-primary">
+                    <a href="generate-page" class="btn btn-primary">
                         📄 Classic Mode<br>
                         <small style="font-size: 12px;">(New page for each video)</small>
                     </a>
-                    <a href="/live" class="btn btn-secondary">
+                    <a href="live" class="btn btn-secondary">
                         🔄 Live Mode<br>
                         <small style="font-size: 12px;">(Update video in-place)</small>
                     </a>
@@ -874,4 +874,10 @@ def serve_file(path: str):
     return JSONResponse({"error": "serve with nginx"}, status_code=404)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 8080)),
+        proxy_headers=True,
+        forwarded_allow_ips="*",
+    )
