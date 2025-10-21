@@ -465,11 +465,11 @@ async def generate_page():
 
 @app.get("/live")
 async def live_page():
-    """Live update page with ChatGPT→TTS and scrollable menu"""
+    """Live update page with ChatGPT→TTS, scrollable menu, gaze tracking + metrics, and autoplay"""
     return HTMLResponse("""
     <html>
         <head>
-            <title>SyncTalk - Live Mode (ChatGPT → TTS)</title>
+            <title>SyncTalk - Live Mode (ChatGPT → TTS + Gaze)</title>
             <style>
                 * { margin: 0; padding: 0; box-sizing: border-box; }
                 body {
@@ -481,49 +481,48 @@ async def live_page():
                 .header { text-align: center; color: white; margin-bottom: 30px; }
                 .header h1 { font-size: 2.5em; margin-bottom: 10px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
                 .main-content { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 20px; }
-
                 .panel {
                     background: white; border-radius: 15px; padding: 25px;
                     box-shadow: 0 10px 30px rgba(0,0,0,0.2);
                     display: flex; flex-direction: column;
                 }
 
-                /* Scrollable menu container */
+                /* Scrollable menu container (left panel, above prompt) */
                 .menu-section {
-                    max-height: 50vh;               /* Takes only half the screen height */
-                    overflow-y: auto;               /* Make it scrollable */
-                    padding-right: 10px;
+                    max-height: 50vh;               /* fixed area, independently scrollable */
+                    overflow-y: auto;
+                    padding: 12px 12px 12px 16px;
                     margin-bottom: 20px;
                     border: 1px solid #eee;
                     border-radius: 10px;
                     background: #fafafa;
                 }
-
                 .menu-section h3 {
-                    color: #333; margin: 10px 0 15px; font-size: 1.4em;
+                    color: #333; margin: 4px 0 12px; font-size: 1.4em;
                     text-align: center; position: sticky; top: 0;
                     background: #fafafa; padding: 8px 0; z-index: 5;
                 }
-
                 .menu-item {
-                    margin-bottom: 15px;
-                    border: 1px solid #e5e5e5;
-                    border-radius: 8px;
-                    padding: 12px;
-                    background: #fff;
-                    transition: box-shadow 0.15s ease;
+                    margin-bottom: 16px;
+                    border: 1px solid #e5e5e5; border-radius: 10px;
+                    padding: 14px 12px; background: #fff;
+                    transition: box-shadow 120ms ease, transform 120ms ease, border-color 120ms ease;
+                    min-height: 110px;
                 }
-                .menu-item:hover { box-shadow: 0 0 0 3px rgba(102,126,234,0.3); }
+                .menu-item:hover { border-color: #d8e7f7; }
                 .menu-item h4 {
                     display: flex; justify-content: space-between;
                     margin: 0 0 6px; font-size: 1.05rem;
                 }
                 .menu-item p { margin: 0; color: #555; font-size: 0.95rem; line-height: 1.4; }
+                .menu-item.highlight {
+                    box-shadow: 0 0 0 3px rgba(0,120,255,0.35);
+                    transform: translateY(-1px);
+                }
 
                 .form-section h2 {
                     color: #333; margin: 10px 0 15px; font-size: 1.4em; text-align: center;
                 }
-
                 .form-group { margin-bottom: 20px; }
                 .form-group label { display: block; margin-bottom: 8px; color: #555; font-weight: 500; }
                 .form-group textarea, .form-group input[type="text"] {
@@ -551,8 +550,7 @@ async def live_page():
                 .status-error { background: #f8d7da; color: #721c24; }
                 .loading-spinner {
                     display: inline-block; width: 20px; height: 20px; margin-right: 10px;
-                    border: 3px solid rgba(0,0,0,0.1); border-radius: 50%;
-                    border-top-color: #667eea; animation: spin 1s ease-in-out infinite;
+                    border: 3px solid rgba(0,0,0,0.1); border-radius: 50%; border-top-color: #667eea; animation: spin 1s ease-in-out infinite;
                 }
                 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -566,10 +564,66 @@ async def live_page():
                 .placeholder svg { width: 100px; height: 100px; margin-bottom: 20px; opacity: 0.3; }
 
                 @media (max-width: 768px) { .main-content { grid-template-columns: 1fr; } }
-
                 .back-link { display: block; text-align: center; margin-top: 20px; color: white; text-decoration: none; }
                 .back-link:hover { text-decoration: underline; }
                 .generated-text { margin-top: 10px; font-size: 14px; color: #555; text-align: center; }
+
+                /* Gaze dot (debug; hidden by default) */
+                .gaze-dot {
+                    position: fixed; width: 8px; height: 8px; border-radius: 50%;
+                    background: red; pointer-events: none; z-index: 99999;
+                    transform: translate(-50%, -50%); display: none;
+                }
+
+                /* Calibration overlay */
+                .calib-backdrop {
+                    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+                    display: flex; align-items: center; justify-content: center; z-index: 99998;
+                }
+                .calib-card {
+                    position: relative; width: min(640px, 92vw);
+                    background: #fff; border-radius: 12px; padding: 20px 20px 28px;
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+                }
+                .calib-title { margin: 0 0 6px; font-size: 1.15rem; }
+                .calib-desc { margin: 0 0 12px; color: #555; font-size: 0.95rem; }
+                .calib-stage {
+                    position: relative; width: 100%; aspect-ratio: 16/9;
+                    border: 1px dashed #ddd; border-radius: 10px; background: #fafafa; overflow: hidden;
+                }
+                .calib-dot {
+                    position: absolute; width: 18px; height: 18px; border-radius: 50%;
+                    background: #0077cc; box-shadow: 0 0 0 4px rgba(0,119,204,0.2);
+                    cursor: pointer; transform: translate(-50%, -50%);
+                    transition: transform 120ms ease, background 120ms ease, box-shadow 120ms ease;
+                }
+                .calib-dot.done {
+                    background: #2e7d32; box-shadow: 0 0 0 4px rgba(46,125,50,0.2);
+                    transform: translate(-50%, -50%) scale(0.85);
+                }
+                .calib-footer {
+                    display: flex; align-items: center; gap: 12px; margin-top: 12px;
+                    justify-content: space-between; flex-wrap: wrap;
+                }
+                .calib-progress { flex: 1; height: 10px; background: #eee; border-radius: 999px; overflow: hidden; min-width: 160px; }
+                .calib-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #0077cc, #00a1ff); }
+                .btn-secondary { background: #e9eef3; color: #0d3a5c; border: 1px solid #c9d7e3; }
+                .btn-secondary:hover { background: #dfe8ef; }
+                .hidden { display: none !important; }
+
+                /* Metrics overlay */
+                .metrics {
+                    position: fixed; left: 20px; bottom: 20px; width: 320px;
+                    background: rgba(255,255,255,0.92); border: 1px solid #dcdcdc; border-radius: 10px;
+                    box-shadow: 0 4px 18px rgba(0,0,0,0.08); padding: 12px 12px 8px; z-index: 99990;
+                    backdrop-filter: blur(2px);
+                }
+                .metrics h4 { margin: 0 0 8px; font-size: 0.95rem; color: #0f3057; }
+                .metric-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; margin: 6px 0; }
+                .metric-label { font-size: 0.9rem; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .metric-time { font-variant-numeric: tabular-nums; font-size: 0.9rem; color: #222; }
+                .metric-bar { grid-column: 1 / -1; height: 6px; background: #eee; border-radius: 999px; overflow: hidden; }
+                .metric-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #6fb1ff, #1e90ff); transition: width 200ms linear; }
             </style>
         </head>
         <body>
@@ -583,7 +637,7 @@ async def live_page():
                     <!-- LEFT PANEL -->
                     <div class="panel form-section">
                         <!-- Scrollable Menu -->
-                        <div class="menu-section">
+                        <div class="menu-section" id="menuSection">
                             <h3>Today's Menu</h3>
 
                             <div class="menu-item"><h4>Margherita Pizza <span>$12</span></h4><p>Classic pizza with tomato sauce, mozzarella, and fresh basil leaves.</p></div>
@@ -637,8 +691,46 @@ async def live_page():
                 <a href="/" class="back-link">← Back to Home</a>
             </div>
 
-            <!-- JS identical to before -->
+            <!-- Gaze debug dot -->
+            <div id="gazeDot" class="gaze-dot"></div>
+
+            <!-- Metrics Overlay -->
+            <div id="metrics" class="metrics">
+                <h4>Gaze Dwell (seconds)</h4>
+                <div id="metricsList"></div>
+            </div>
+
+            <!-- Calibration Overlay -->
+            <div id="calibOverlay" class="calib-backdrop">
+                <div class="calib-card">
+                    <h4 class="calib-title">Quick Calibration</h4>
+                    <p class="calib-desc">We’ll use your webcam to estimate where you’re looking (processed locally in your browser).
+                        Click each dot once. When all 5 are green, click <b>Finish</b>.</p>
+
+                    <div class="calib-stage" id="calibStage">
+                        <div class="calib-dot" data-key="tl" style="left:6%;  top:8%;"></div>
+                        <div class="calib-dot" data-key="tr" style="left:94%; top:8%;"></div>
+                        <div class="calib-dot" data-key="br" style="left:94%; top:92%;"></div>
+                        <div class="calib-dot" data-key="bl" style="left:6%;  top:92%;"></div>
+                        <div class="calib-dot" data-key="c"  style="left:50%; top:50%;"></div>
+                    </div>
+
+                    <div class="calib-footer">
+                        <div class="calib-progress"><div id="calibBar" class="calib-bar"></div></div>
+                        <div class="calib-actions">
+                            <button id="retryBtn" class="btn-secondary">Reset</button>
+                            <button id="finishBtn">Finish</button>
+                        </div>
+                        <div class="calib-note">Tip: keep your head steady and sit ~arm’s length from the screen.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WebGazer (HTTPS or localhost required) -->
+            <script src="https://cdn.jsdelivr.net/npm/webgazer/dist/webgazer.min.js"></script>
+
             <script>
+                /* ---------- Live page: ChatGPT->TTS flow ---------- */
                 const BASE = new URL(window.location.href);
                 const form = document.getElementById('textForm');
                 const promptEl = document.getElementById('prompt');
@@ -671,15 +763,21 @@ async def live_page():
                             if (data.status === 'completed') {
                                 clearInterval(interval);
                                 showStatus('Video generated successfully!', 'success');
+
                                 video.src = data.video_url + '?t=' + Date.now();
                                 video.style.display = 'block';
                                 placeholder.style.display = 'none';
                                 videoStatus.textContent = 'Generated at ' + new Date().toLocaleTimeString();
-                                video.autoplay = true;
-                                video.muted = false;  // optional: leave muted if browser blocks autoplay with sound
-                                video.play().catch(err => console.warn('Autoplay blocked:', err));
                                 generatedText.textContent = data.generated_text ? ('🗨️ Script: ' + data.generated_text) : '';
-                                btn.disabled = false; btn.textContent = 'Generate Talking Video'; hideStatusSoon();
+
+                                /* Autoplay when ready */
+                                video.autoplay = true;
+                                // If you'd like sound immediately, set muted=false; otherwise keep muted to guarantee autoplay.
+                                // video.muted = false;
+                                video.play().catch(err => console.warn('Autoplay blocked:', err));
+
+                                btn.disabled = false; btn.textContent = 'Generate Talking Video';
+                                hideStatusSoon();
                             } else if (data.status === 'error') {
                                 clearInterval(interval);
                                 showStatus('Error: ' + data.message, 'error');
@@ -718,6 +816,183 @@ async def live_page():
                         btn.disabled = false; btn.textContent = 'Generate Talking Video';
                     }
                 });
+
+                /* ---------- Gaze tracking + metrics ---------- */
+                const items = Array.from(document.querySelectorAll('.menu-item'));
+                const labels = items.map(el => el.querySelector('h4')?.childNodes?.[0]?.textContent.trim() || 'Item');
+                const gazeDot = document.getElementById('gazeDot');
+
+                // Dwell accumulation (ms) per item
+                const dwell = new Array(items.length).fill(0);
+                let lastTs = null;
+                let currentIdx = -1;
+
+                // Metrics UI build
+                const metricsList = document.getElementById('metricsList');
+                const rows = labels.map((label, i) => {
+                    const row = document.createElement('div');
+                    row.className = 'metric-row';
+
+                    const name = document.createElement('div');
+                    name.className = 'metric-label';
+                    name.textContent = label;
+
+                    const time = document.createElement('div');
+                    time.className = 'metric-time';
+                    time.textContent = '0.0s';
+
+                    const bar = document.createElement('div');
+                    bar.className = 'metric-bar';
+                    const fill = document.createElement('div');
+                    fill.className = 'metric-fill';
+                    bar.appendChild(fill);
+
+                    row.appendChild(name);
+                    row.appendChild(time);
+                    row.appendChild(bar);
+                    metricsList.appendChild(row);
+                    return {row, time, fill};
+                });
+
+                function updateMetrics() {
+                    const max = Math.max(...dwell, 1);
+                    for (let i = 0; i < dwell.length; i++) {
+                        const seconds = dwell[i] / 1000;
+                        rows[i].time.textContent = seconds.toFixed(1) + 's';
+                        const pct = Math.min(100, (dwell[i] / max) * 100);
+                        rows[i].fill.style.width = pct + '%';
+                    }
+                }
+
+                function bbox(el) {
+                    const r = el.getBoundingClientRect();
+                    return { x: r.left, y: r.top, w: r.width, h: r.height };
+                }
+                function contains(b, x, y) {
+                    return x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
+                }
+                function highlightIdx(idx) {
+                    items.forEach(i => i.classList.remove('highlight'));
+                    if (idx >= 0) items[idx].classList.add('highlight');
+                }
+
+                /* ---------- Calibration overlay ---------- */
+                const overlay = document.getElementById('calibOverlay');
+                const dots = Array.from(document.querySelectorAll('.calib-dot'));
+                const bar = document.getElementById('calibBar');
+                const finishBtn = document.getElementById('finishBtn');
+                const retryBtn = document.getElementById('retryBtn');
+
+                let done = new Set();
+                function updateBar() {
+                    const pct = Math.round((done.size / dots.length) * 100);
+                    bar.style.width = pct + '%';
+                }
+                function resetCalibration() {
+                    done.clear();
+                    dots.forEach(d => d.classList.remove('done'));
+                    updateBar();
+                }
+
+                dots.forEach(dot => {
+                    dot.addEventListener('click', () => {
+                        dot.classList.add('done');
+                        done.add(dot.dataset.key);
+                        updateBar();
+
+                        // Record labeled samples at the dot's position
+                        const rect = dot.getBoundingClientRect();
+                        const x = rect.left + rect.width / 2;
+                        const y = rect.top + rect.height / 2;
+                        if (webgazer && webgazer.recordScreenPosition) {
+                            const now = performance.now();
+                            for (let i = 0; i < 5; i++) {
+                                webgazer.recordScreenPosition(x, y, now + i * 5);
+                            }
+                        }
+                    });
+                });
+
+                retryBtn.addEventListener('click', resetCalibration);
+
+                finishBtn.addEventListener('click', () => {
+                    if (done.size < dots.length) {
+                        alert('Please click all five dots to complete calibration.');
+                        return;
+                    }
+                    overlay.classList.add('hidden');
+                    startGaze();
+                });
+
+                /* ---------- WebGazer init ---------- */
+                (async function initWebGazer(){
+                    try {
+                        if (webgazer.addMouseEventListeners) webgazer.addMouseEventListeners();
+                        await webgazer.begin();
+
+                        // Hide WebGazer default overlays if present
+                        const hide = id => { const n = document.getElementById(id); if (n) n.style.display = 'none'; };
+                        hide('webgazerVideoContainer');
+                        hide('webgazerGazeDot');
+
+                        console.log('WebGazer initialized.');
+                    } catch (e) {
+                        console.error('WebGazer failed to start:', e);
+                        alert('Could not start camera. Please use HTTPS or localhost and allow camera access.');
+                    }
+                })();
+
+                /* ---------- Start gaze listener ---------- */
+                const DWELL_ACTIVATE_MS = 600; // highlight dwell threshold
+                function startGaze() {
+                    // Toggle to visualize gaze point:
+                    // gazeDot.style.display = 'block';
+
+                    if (webgazer.setRegression) webgazer.setRegression('ridge');
+
+                    webgazer.setGazeListener((data, ts) => {
+                        if (!data) { lastTs = ts; return; }
+                        const x = data.x, y = data.y;
+
+                        // (Optional) move debug dot
+                        gazeDot.style.left = x + 'px';
+                        gazeDot.style.top  = y + 'px';
+
+                        // Determine which menu item is under gaze
+                        const overIdx = items.findIndex(el => contains(bbox(el), x, y));
+
+                        // Accumulate dwell for the previous item using delta time
+                        if (lastTs != null && currentIdx >= 0) {
+                            const dt = Math.max(0, ts - lastTs);
+                            dwell[currentIdx] += dt;
+                        }
+                        lastTs = ts;
+
+                        // Handle highlight with dwell threshold
+                        if (overIdx !== currentIdx) {
+                            currentIdx = overIdx;
+                            highlightIdx(-1);
+                            return;
+                        } else {
+                            if (currentIdx >= 0) {
+                                const currentDwell = dwell[currentIdx];
+                                const isHighlighted = items[currentIdx].classList.contains('highlight');
+                                if (!isHighlighted && currentDwell >= DWELL_ACTIVATE_MS) {
+                                    highlightIdx(currentIdx);
+                                }
+                            } else {
+                                highlightIdx(-1);
+                            }
+                        }
+                    });
+
+                    // Update metrics continuously
+                    function metricsLoop() {
+                        updateMetrics();
+                        requestAnimationFrame(metricsLoop);
+                    }
+                    metricsLoop();
+                }
             </script>
         </body>
     </html>
