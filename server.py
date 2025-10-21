@@ -529,8 +529,8 @@ async def live_page():
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>🎭 SyncTalk Live Mode</h1>
-                    <p>Type a prompt → ChatGPT crafts a reply → we speak it and animate a talking head.</p>
+                    <h1>wAIter</h1>
+                    <p>Ask your AI waiter questions about the menu, recommendations, etc....</p>
                 </div>
 
                 <div class="main-content">
@@ -539,14 +539,10 @@ async def live_page():
                         <h2>📝 Enter Prompt</h2>
                         <form id="textForm">
                             <div class="form-group">
-                                <label for="prompt">What should ChatGPT answer (we'll speak the answer)?</label>
-                                <textarea id="prompt" placeholder="e.g., Explain how attention works in transformers in two sentences."></textarea>
+                                <label for="prompt">What should wAIter answer?</label>
+                                <textarea id="prompt" placeholder="e.g., Can you tell me more about the lava cake?."></textarea>
                             </div>
-                            <div class="form-group">
-                                <label for="token">🔐 Authentication Token</label>
-                                <input type="text" id="token" value="supersecrettoken" />
-                            </div>
-                            <button type="submit" class="generate-btn" id="generateBtn">Generate Talking Video</button>
+                            <button type="submit" class="generate-btn" id="generateBtn">Send</button>
                         </form>
                         <div id="statusBar" class="status-bar" style="display: none;"></div>
                     </div>
