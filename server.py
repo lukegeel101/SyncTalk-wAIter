@@ -641,6 +641,11 @@ async def live_page():
                     <!-- LEFT PANEL -->
                     <div class="panel form-section">
                         <!-- Scrollable Menu -->
+                        <div style="text-align:right; margin: 6px 0 12px;">
+                          <button id="recalBtn" class="btn-secondary" style="padding:6px 10px; border-radius:6px; cursor:pointer;">
+                            Recalibrate
+                          </button>
+                        </div>
                         <div class="menu-section" id="menuSection">
                             <h3>Today's Menu</h3>
 
@@ -711,11 +716,18 @@ async def live_page():
                         Click each dot once. When all 5 are green, click <b>Finish</b>.</p>
 
                     <div class="calib-stage" id="calibStage">
-                        <div class="calib-dot" data-key="tl" style="left:6%;  top:8%;"></div>
-                        <div class="calib-dot" data-key="tr" style="left:94%; top:8%;"></div>
-                        <div class="calib-dot" data-key="br" style="left:94%; top:92%;"></div>
-                        <div class="calib-dot" data-key="bl" style="left:6%;  top:92%;"></div>
-                        <div class="calib-dot" data-key="c"  style="left:50%; top:50%;"></div>
+                      <!-- 9-point grid: 10%, 50%, 90% on each axis -->
+                      <div class="calib-dot" data-key="tl"  style="left:10%; top:10%;"></div>
+                      <div class="calib-dot" data-key="tc"  style="left:50%; top:10%;"></div>
+                      <div class="calib-dot" data-key="tr"  style="left:90%; top:10%;"></div>
+                    
+                      <div class="calib-dot" data-key="cl"  style="left:10%; top:50%;"></div>
+                      <div class="calib-dot" data-key="cc"  style="left:50%; top:50%;"></div>
+                      <div class="calib-dot" data-key="cr"  style="left:90%; top:50%;"></div>
+                    
+                      <div class="calib-dot" data-key="bl"  style="left:10%; top:90%;"></div>
+                      <div class="calib-dot" data-key="bc"  style="left:50%; top:90%;"></div>
+                      <div class="calib-dot" data-key="br"  style="left:90%; top:90%;"></div>
                     </div>
 
                     <div class="calib-footer">
@@ -825,6 +837,40 @@ async def live_page():
                 const labels = items.map(el => el.querySelector('h4')?.childNodes?.[0]?.textContent.trim() || 'Item');
                 const gazeDot = document.getElementById('gazeDot');
 
+                // --------- Smoothing (EMA) ----------
+                let smX = null, smY = null;
+                const SMOOTH_ALPHA = 0.25; // 0.15-0.35 works; higher = snappier
+                function smoothXY(x, y) {
+                  if (smX == null) { smX = x; smY = y; }
+                  else { smX = smX + SMOOTH_ALPHA * (x - smX);
+                         smY = smY + SMOOTH_ALPHA * (y - smY); }
+                  return [smX, smY];
+                }
+                
+                // --------- Hysteresis (require stability before switching) ----------
+                let stableIdx = -1;
+                let stableFrames = 0;
+                const STABLE_FRAMES_N = 6;  // ~6 frames ~ 100ms depending on WebGazer rate
+                
+                // --------- Expand hitboxes slightly ----------
+                function expandBBox(b, pct = 0.12) {
+                  const dx = b.w * pct, dy = b.h * pct;
+                  return { x: b.x - dx, y: b.y - dy, w: b.w + 2*dx, h: b.h + 2*dy };
+                }
+                
+                // --------- Implicit calibration on dwell ----------
+                const IMPLICIT_DWELL_MS = 1500; // after 1.5s dwell, add a labeled sample
+                let lastImplicitStamp = 0;
+                
+                // Helper: record N samples at (x,y)
+                function recordSamples(x, y, n = 10, interval = 8) {
+                  if (!webgazer || !webgazer.recordScreenPosition) return;
+                  const start = performance.now();
+                  for (let i = 0; i < n; i++) {
+                    setTimeout(() => webgazer.recordScreenPosition(x, y, performance.now()), i * interval);
+                  }
+                }
+
                 // Dwell accumulation (ms) per item
                 const dwell = new Array(items.length).fill(0);
                 let lastTs = null;
@@ -898,25 +944,35 @@ async def live_page():
                 }
 
                 dots.forEach(dot => {
-                    dot.addEventListener('click', () => {
-                        dot.classList.add('done');
-                        done.add(dot.dataset.key);
-                        updateBar();
-
-                        // Record labeled samples at the dot's position
-                        const rect = dot.getBoundingClientRect();
-                        const x = rect.left + rect.width / 2;
-                        const y = rect.top + rect.height / 2;
-                        if (webgazer && webgazer.recordScreenPosition) {
-                            const now = performance.now();
-                            for (let i = 0; i < 5; i++) {
-                                webgazer.recordScreenPosition(x, y, now + i * 5);
-                            }
-                        }
-                    });
+                  dot.addEventListener('click', () => {
+                    dot.classList.add('done');
+                    done.add(dot.dataset.key);
+                    updateBar();
+                
+                    const rect = dot.getBoundingClientRect();
+                    const cx = rect.left + rect.width / 2;
+                    const cy = rect.top  + rect.height / 2;
+                
+                    // Take a burst of labeled samples for stronger calibration
+                    recordSamples(cx, cy, /*n=*/20, /*interval ms=*/6);
+                  });
                 });
 
                 retryBtn.addEventListener('click', resetCalibration);
+                
+                document.getElementById('recalBtn').addEventListener('click', () => {
+                  overlay.classList.remove('hidden');
+                  resetCalibration();
+                });
+                
+                // Hotkey 'c' to open calibration quickly
+                document.addEventListener('keydown', (e) => {
+                  if (e.key.toLowerCase() === 'c') {
+                    overlay.classList.remove('hidden');
+                    resetCalibration();
+                  }
+                });
+
 
                 finishBtn.addEventListener('click', () => {
                     if (done.size < dots.length) {
@@ -948,53 +1004,74 @@ async def live_page():
                 /* ---------- Start gaze listener ---------- */
                 const DWELL_ACTIVATE_MS = 600; // highlight dwell threshold
                 function startGaze() {
-                    // Toggle to visualize gaze point:
-                    // gazeDot.style.display = 'block';
-
-                    if (webgazer.setRegression) webgazer.setRegression('ridge');
-
-                    webgazer.setGazeListener((data, ts) => {
-                        if (!data) { lastTs = ts; return; }
-                        const x = data.x, y = data.y;
-
-                        // (Optional) move debug dot
-                        gazeDot.style.left = x + 'px';
-                        gazeDot.style.top  = y + 'px';
-
-                        // Determine which menu item is under gaze
-                        const overIdx = items.findIndex(el => contains(bbox(el), x, y));
-
-                        // Accumulate dwell for the previous item using delta time
-                        if (lastTs != null && currentIdx >= 0) {
-                            const dt = Math.max(0, ts - lastTs);
-                            dwell[currentIdx] += dt;
-                        }
-                        lastTs = ts;
-
-                        // Handle highlight with dwell threshold
-                        if (overIdx !== currentIdx) {
-                            currentIdx = overIdx;
-                            highlightIdx(-1);
-                            return;
-                        } else {
-                            if (currentIdx >= 0) {
-                                const currentDwell = dwell[currentIdx];
-                                const isHighlighted = items[currentIdx].classList.contains('highlight');
-                                if (!isHighlighted && currentDwell >= DWELL_ACTIVATE_MS) {
-                                    highlightIdx(currentIdx);
-                                }
-                            } else {
-                                highlightIdx(-1);
-                            }
-                        }
+                  if (webgazer.setRegression) webgazer.setRegression('ridge');
+                
+                  webgazer.setGazeListener((data, ts) => {
+                    if (!data) { lastTs = ts; return; }
+                
+                    // 1) Smooth the point
+                    const [x, y] = smoothXY(data.x, data.y);
+                
+                    // (Optional) debug dot
+                    // gazeDot.style.left = x + 'px';
+                    // gazeDot.style.top  = y + 'px';
+                
+                    // 2) Which item under gaze? Use expanded hitboxes
+                    const overIdxRaw = items.findIndex(el => {
+                      const eb = expandBBox(bbox(el));   // expanded
+                      return contains(eb, x, y);
                     });
-
-                    // Update metrics continuously
-                    function metricsLoop() {
-                        updateMetrics();
-                        requestAnimationFrame(metricsLoop);
+                
+                    // 3) Hysteresis: require a few frames on the same item
+                    if (overIdxRaw === stableIdx) {
+                      stableFrames++;
+                    } else {
+                      stableIdx = overIdxRaw;
+                      stableFrames = 1;
                     }
-                    metricsLoop();
+                    const overIdx = (stableFrames >= STABLE_FRAMES_N) ? stableIdx : -1;
+                
+                    // 4) Accumulate dwell against the *currentIdx* we consider active
+                    if (lastTs != null && currentIdx >= 0) {
+                      const dt = Math.max(0, ts - lastTs);
+                      dwell[currentIdx] += dt;
+                    }
+                    lastTs = ts;
+                
+                    // 5) Switch logic + highlight after dwell threshold
+                    if (overIdx !== currentIdx) {
+                      currentIdx = overIdx;
+                      highlightIdx(-1);
+                      return;
+                    } else {
+                      if (currentIdx >= 0) {
+                        const currentDwell = dwell[currentIdx];
+                        const isHighlighted = items[currentIdx].classList.contains('highlight');
+                        if (!isHighlighted && currentDwell >= DWELL_ACTIVATE_MS) {
+                          highlightIdx(currentIdx);
+                        }
+                
+                        // 6) Implicit calibration once per item every IMPLICIT_DWELL_MS
+                        const now = performance.now();
+                        if (currentDwell >= IMPLICIT_DWELL_MS && (now - lastImplicitStamp) > 800) {
+                          const r = items[currentIdx].getBoundingClientRect();
+                          const cx = r.left + r.width/2;
+                          const cy = r.top  + r.height/2;
+                          recordSamples(cx, cy, /*n=*/12, /*interval=*/8);
+                          lastImplicitStamp = now;
+                        }
+                      } else {
+                        highlightIdx(-1);
+                      }
+                    }
+                  });
+                
+                  // Metrics refresh loop (unchanged)
+                  function metricsLoop() {
+                    updateMetrics();
+                    requestAnimationFrame(metricsLoop);
+                  }
+                  metricsLoop();
                 }
             </script>
         </body>
