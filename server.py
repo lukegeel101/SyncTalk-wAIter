@@ -581,25 +581,29 @@ async def live_page():
                     display: flex; align-items: center; justify-content: center; z-index: 99998;
                 }
                 .calib-card {
-                    position: relative; width: min(640px, 92vw);
-                    background: #fff; border-radius: 12px; padding: 20px 20px 28px;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+                  position: relative;
+                  width: 96vw; max-width: 1400px;
+                  background: #fff; border-radius: 12px; padding: 16px 16px 22px;
+                  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
                 }
                 .calib-title { margin: 0 0 6px; font-size: 1.15rem; }
                 .calib-desc { margin: 0 0 12px; color: #555; font-size: 0.95rem; }
                 .calib-stage {
-                    position: relative; width: 100%; aspect-ratio: 16/9;
-                    border: 1px dashed #ddd; border-radius: 10px; background: #fafafa; overflow: hidden;
+                  position: relative;
+                  width: 100%;
+                  height: min(78vh, 900px); /* tall, but not past viewport on small laptops */
+                  border: 1px dashed #ddd; border-radius: 10px; background: #fafafa; overflow: hidden;
                 }
+                /* Larger, easier-to-click dots */
                 .calib-dot {
-                    position: absolute; width: 18px; height: 18px; border-radius: 50%;
-                    background: #0077cc; box-shadow: 0 0 0 4px rgba(0,119,204,0.2);
-                    cursor: pointer; transform: translate(-50%, -50%);
-                    transition: transform 120ms ease, background 120ms ease, box-shadow 120ms ease;
+                  position: absolute; width: 22px; height: 22px; border-radius: 50%;
+                  background: #0077cc; box-shadow: 0 0 0 6px rgba(0,119,204,0.18);
+                  cursor: pointer; transform: translate(-50%, -50%);
+                  transition: transform 120ms ease, background 120ms ease, box-shadow 120ms ease;
                 }
                 .calib-dot.done {
-                    background: #2e7d32; box-shadow: 0 0 0 4px rgba(46,125,50,0.2);
-                    transform: translate(-50%, -50%) scale(0.85);
+                  background: #2e7d32; box-shadow: 0 0 0 6px rgba(46,125,50,0.18);
+                  transform: translate(-50%, -50%) scale(0.9);
                 }
                 .calib-footer {
                     display: flex; align-items: center; gap: 12px; margin-top: 12px;
@@ -716,18 +720,18 @@ async def live_page():
                         Click each dot once. When all 5 are green, click <b>Finish</b>.</p>
 
                     <div class="calib-stage" id="calibStage">
-                      <!-- 9-point grid: 10%, 50%, 90% on each axis -->
-                      <div class="calib-dot" data-key="tl"  style="left:10%; top:10%;"></div>
-                      <div class="calib-dot" data-key="tc"  style="left:50%; top:10%;"></div>
-                      <div class="calib-dot" data-key="tr"  style="left:90%; top:10%;"></div>
-                    
-                      <div class="calib-dot" data-key="cl"  style="left:10%; top:50%;"></div>
+                      <!-- Row 1 -->
+                      <div class="calib-dot" data-key="tl"  style="left:5%;  top:8%;"></div>
+                      <div class="calib-dot" data-key="tc"  style="left:50%; top:8%;"></div>
+                      <div class="calib-dot" data-key="tr"  style="left:95%; top:8%;"></div>
+                      <!-- Row 2 -->
+                      <div class="calib-dot" data-key="cl"  style="left:5%;  top:50%;"></div>
                       <div class="calib-dot" data-key="cc"  style="left:50%; top:50%;"></div>
-                      <div class="calib-dot" data-key="cr"  style="left:90%; top:50%;"></div>
-                    
-                      <div class="calib-dot" data-key="bl"  style="left:10%; top:90%;"></div>
-                      <div class="calib-dot" data-key="bc"  style="left:50%; top:90%;"></div>
-                      <div class="calib-dot" data-key="br"  style="left:90%; top:90%;"></div>
+                      <div class="calib-dot" data-key="cr"  style="left:95%; top:50%;"></div>
+                      <!-- Row 3 -->
+                      <div class="calib-dot" data-key="bl"  style="left:5%;  top:92%;"></div>
+                      <div class="calib-dot" data-key="bc"  style="left:50%; top:92%;"></div>
+                      <div class="calib-dot" data-key="br"  style="left:95%; top:92%;"></div>
                     </div>
 
                     <div class="calib-footer">
@@ -926,6 +930,10 @@ async def live_page():
                 }
 
                 /* ---------- Calibration overlay ---------- */
+
+                function lockScroll() { document.body.dataset.prevOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; }
+                function unlockScroll() { document.body.style.overflow = document.body.dataset.prevOverflow || ''; }
+
                 const overlay = document.getElementById('calibOverlay');
                 const dots = Array.from(document.querySelectorAll('.calib-dot'));
                 const bar = document.getElementById('calibBar');
@@ -943,19 +951,41 @@ async def live_page():
                     updateBar();
                 }
 
+                // Take a bigger burst of samples — improves the regression fit
+                function recordSamples(x, y, n = 24, interval = 6) {
+                  if (!webgazer || !webgazer.recordScreenPosition) return;
+                  for (let i = 0; i < n; i++) {
+                    setTimeout(() => webgazer.recordScreenPosition(x, y, performance.now()), i * interval);
+                  }
+                }
+
                 dots.forEach(dot => {
                   dot.addEventListener('click', () => {
                     dot.classList.add('done');
                     done.add(dot.dataset.key);
                     updateBar();
                 
-                    const rect = dot.getBoundingClientRect();
-                    const cx = rect.left + rect.width / 2;
-                    const cy = rect.top  + rect.height / 2;
+                    const r = dot.getBoundingClientRect();
+                    const cx = r.left + r.width/2;
+                    const cy = r.top  + r.height/2;
                 
-                    // Take a burst of labeled samples for stronger calibration
-                    recordSamples(cx, cy, /*n=*/20, /*interval ms=*/6);
+                    // Burst of labeled samples at this target (more = better fit)
+                    recordSamples(cx, cy, 28, 5);
                   });
+                });
+
+                // When opening calibration from your Recalibrate button/hotkey:
+                document.getElementById('recalBtn')?.addEventListener('click', () => {
+                  overlay.classList.remove('hidden'); resetCalibration(); lockScroll();
+                });
+                document.addEventListener('keydown', (e) => {
+                  if (e.key.toLowerCase() === 'c') { overlay.classList.remove('hidden'); resetCalibration(); lockScroll(); }
+                });
+                
+                finishBtn.addEventListener('click', () => {
+                  if (done.size < dots.length) { alert('Please click all nine dots to complete calibration.'); return; }
+                  overlay.classList.add('hidden'); unlockScroll();
+                  startGaze(); // your existing function
                 });
 
                 retryBtn.addEventListener('click', resetCalibration);
