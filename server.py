@@ -671,10 +671,6 @@ async def live_page():
                                 <label for="prompt">What should ChatGPT answer (we'll speak the answer)?</label>
                                 <textarea id="prompt" placeholder="e.g., Describe the flavors of each wine on the menu."></textarea>
                             </div>
-                            <div class="form-group">
-                                <label for="token">🔐 Authentication Token</label>
-                                <input type="text" id="token" value="supersecrettoken" />
-                            </div>
                             <button type="submit" class="generate-btn" id="generateBtn">Generate Talking Video</button>
                         </form>
                         <div id="statusBar" class="status-bar" style="display: none;"></div>
