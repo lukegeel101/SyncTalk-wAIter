@@ -675,6 +675,7 @@ async def live_page():
 
                         <!-- Prompt Form -->
                         <h2>📝 Enter Prompt</h2>
+                        <input type="hidden" id="token" value="supersecrettoken" />
                         <form id="textForm">
                             <div class="form-group">
                                 <label for="prompt">What should ChatGPT answer (we'll speak the answer)?</label>
