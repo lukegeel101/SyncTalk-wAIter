@@ -611,13 +611,17 @@ async def live_page():
                 .btn-secondary:hover { background: #dfe8ef; }
                 .hidden { display: none !important; }
 
-                /* Metrics overlay */
+                /* Inline metrics (below video on the right) */
                 .metrics {
-                    position: fixed; left: 20px; bottom: 20px; width: 320px;
-                    background: rgba(255,255,255,0.92); border: 1px solid #dcdcdc; border-radius: 10px;
-                    box-shadow: 0 4px 18px rgba(0,0,0,0.08); padding: 12px 12px 8px; z-index: 99990;
+                    width: 100%;
+                    background: rgba(255,255,255,0.92);
+                    border: 1px solid #dcdcdc;
+                    border-radius: 10px;
+                    box-shadow: 0 4px 18px rgba(0,0,0,0.08);
+                    padding: 12px 12px 8px;
                     backdrop-filter: blur(2px);
-                }
+                    margin-top: 16px;   /* space above metrics under the video */
+                  }
                 .metrics h4 { margin: 0 0 8px; font-size: 0.95rem; color: #0f3057; }
                 .metric-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; margin: 6px 0; }
                 .metric-label { font-size: 0.9rem; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -685,6 +689,11 @@ async def live_page():
                         </div>
                         <div id="videoStatus" style="margin-top: 10px; text-align: center; color: #666;"></div>
                         <div id="generatedText" class="generated-text"></div>
+                        <!-- ✅ Metrics now lives here, below the video -->
+                        <div id="metrics" class="metrics">
+                            <h4>Gaze Dwell (seconds)</h4>
+                            <div id="metricsList"></div>
+                        </div>
                     </div>
                 </div>
 
@@ -693,12 +702,6 @@ async def live_page():
 
             <!-- Gaze debug dot -->
             <div id="gazeDot" class="gaze-dot"></div>
-
-            <!-- Metrics Overlay -->
-            <div id="metrics" class="metrics">
-                <h4>Gaze Dwell (seconds)</h4>
-                <div id="metricsList"></div>
-            </div>
 
             <!-- Calibration Overlay -->
             <div id="calibOverlay" class="calib-backdrop">
