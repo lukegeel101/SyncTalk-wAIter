@@ -708,17 +708,17 @@ async def live_page():
         <!-- Scripts -->
         <script src="https://cdn.jsdelivr.net/npm/webgazer/dist/webgazer.min.js"></script>
         <script>
-          // ------------- Basic calibration wiring (clean, no duplicates) -------------
+          // ---------- Calibration wiring ----------
           const overlay   = document.getElementById('calibOverlay');
           const dots      = Array.from(document.querySelectorAll('.calib-dot'));
           const bar       = document.getElementById('calibBar');
           const finishBtn = document.getElementById('finishBtn');
           const retryBtn  = document.getElementById('retryBtn');
           const recalBtn  = document.getElementById('recalBtn');
-
+        
           function lockScroll(){ document.body.dataset._prevOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; }
           function unlockScroll(){ document.body.style.overflow = document.body.dataset._prevOverflow || ''; }
-
+        
           function updateBar() {
             const doneCount = dots.filter(d => d.classList.contains('done')).length;
             bar.style.width = Math.round((doneCount / dots.length) * 100) + '%';
@@ -733,8 +733,7 @@ async def live_page():
               setTimeout(() => webgazer.recordScreenPosition(x, y, performance.now()), i*interval);
             }
           }
-
-          // Dot clicks: mark done + burst samples
+        
           dots.forEach(dot => {
             dot.addEventListener('click', () => {
               dot.classList.add('done');
@@ -745,20 +744,7 @@ async def live_page():
               recordSamples(cx, cy);
             });
           });
-
-          // Finish / Reset
-          finishBtn.addEventListener('click', () => {
-            if (dots.some(d => !d.classList.contains('done'))) {
-              alert('Please click all dots to complete calibration.');
-              return;
-            }
-            overlay.classList.add('hidden');
-            unlockScroll();
-            startGaze();
-          });
-          retryBtn.addEventListener('click', resetCalibration);
-
-          // Recalibrate button + hotkey Ctrl+Shift+C
+        
           function openCalibration() {
             overlay.classList.remove('hidden');
             resetCalibration();
@@ -773,40 +759,178 @@ async def live_page():
               e.preventDefault(); openCalibration();
             }
           });
-
-          // ------------- WebGazer init -------------
+        
+          finishBtn.addEventListener('click', () => {
+            if (dots.some(d => !d.classList.contains('done'))) {
+              alert('Please click all dots to complete calibration.');
+              return;
+            }
+            overlay.classList.add('hidden');
+            unlockScroll();
+            startGaze();            // start gaze AFTER calibration
+          });
+          retryBtn.addEventListener('click', resetCalibration);
+        
+          // ---------- WebGazer init (disable its own overlays & red dot) ----------
           (async function initWebGazer(){
             try {
               if (webgazer.addMouseEventListeners) webgazer.addMouseEventListeners();
               await webgazer.begin();
-
-              // Hide stock overlays if present
-              const hide = id => { const n = document.getElementById(id); if (n) n && (n.style.display='none'); };
+        
+              // Turn off WebGazer's own prediction point and preview
+              if (webgazer.showPredictionPoints) webgazer.showPredictionPoints(false);
+              if (webgazer.showVideo)            webgazer.showVideo(false);
+        
+              // Hide any leftover containers if present
+              const hide = id => { const n = document.getElementById(id); if (n) n.style.display='none'; };
               hide('webgazerVideoContainer');
               hide('webgazerGazeDot');
-
-              // Show overlay on load and lock scroll
-              lockScroll();
+        
+              lockScroll(); // keep calibration up on load
               console.log('WebGazer initialized.');
             } catch (e) {
               console.error('WebGazer failed to start:', e);
               alert('Could not start camera. Use HTTPS or localhost and allow camera access.');
             }
           })();
-
-          // ------------- Minimal gaze listener (shows red dot so you can verify) -------------
-          const gazeDot = document.getElementById('gazeDot');
-          function startGaze() {
-            if (webgazer.setRegression) webgazer.setRegression('ridge');
-
-            // Make the red debug dot visible
-            gazeDot.style.display = 'block';
-
-            webgazer.setGazeListener((data) => {
-              if (!data) return;
-              gazeDot.style.left = data.x + 'px';
-              gazeDot.style.top  = data.y + 'px';
+        
+          // ---------- Dwell metrics + stabilized selection ----------
+          const menuSection = document.getElementById('menuSection');
+          const items  = Array.from(document.querySelectorAll('.menu-item'));
+          const labels = items.map(el => el.querySelector('h4')?.childNodes?.[0]?.textContent.trim() || 'Item');
+        
+          // Build metrics UI rows
+          const metricsList = document.getElementById('metricsList');
+          const rows = labels.map((label) => {
+            const row  = document.createElement('div'); row.className = 'metric-row';
+            const name = document.createElement('div'); name.className = 'metric-label'; name.textContent = label;
+            const time = document.createElement('div'); time.className = 'metric-time';  time.textContent = '0.0s';
+            const bar  = document.createElement('div'); bar.className  = 'metric-bar';
+            const fill = document.createElement('div'); fill.className = 'metric-fill'; bar.appendChild(fill);
+            row.appendChild(name); row.appendChild(time); row.appendChild(bar);
+            metricsList.appendChild(row);
+            return {row, time, fill};
+          });
+        
+          // Consider only visible items in the scrollable menu
+          const visibleIdx = new Set();
+          const io = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+              const i = items.indexOf(entry.target);
+              if (i === -1) return;
+              if (entry.intersectionRatio >= 0.6) visibleIdx.add(i);
+              else visibleIdx.delete(i);
             });
+          }, { root: menuSection, threshold: [0, 0.25, 0.5, 0.6, 0.75, 1] });
+          items.forEach(el => io.observe(el));
+        
+          // Helpers
+          function bbox(el){ const r = el.getBoundingClientRect(); return {x:r.left, y:r.top, w:r.width, h:r.height}; }
+          function contains(b,x,y){ return x>=b.x && x<=b.x+b.w && y>=b.y && y<=b.y+b.h; }
+          function expandBBox(b, pct=0.10){ const dx=b.w*pct, dy=b.h*pct; return {x:b.x-dx, y:b.y-dy, w:b.w+2*dx, h:b.h+2*dy}; }
+          function clipToMenu(b){ const r=menuSection.getBoundingClientRect(); const x1=Math.max(b.x,r.left), y1=Math.max(b.y,r.top), x2=Math.min(b.x+b.w,r.right), y2=Math.min(b.y+b.h,r.bottom); if(x2<=x1||y2<=y1) return null; return {x:x1,y:y1,w:x2-x1,h:y2-y1}; }
+          function pointInMenu(x,y){ const r=menuSection.getBoundingClientRect(); return x>=r.left && x<=r.right && y>=r.top && y<=r.bottom; }
+          function topMostIsInMenu(x,y){ const el=document.elementFromPoint(x,y); return !!el && (el===menuSection || menuSection.contains(el)); }
+          function highlightIdx(idx){ items.forEach(i=>i.classList.remove('highlight')); if(idx>=0) items[idx].classList.add('highlight'); }
+        
+          // Smoothing + hysteresis
+          let smX=null, smY=null; const SMOOTH_ALPHA=0.25;
+          function smoothXY(x,y){ if(smX==null){smX=x; smY=y;} else { smX += SMOOTH_ALPHA*(x-smX); smY += SMOOTH_ALPHA*(y-smY);} return [smX,smY]; }
+          let stableIdx=-1, stableFrames=0; const STABLE_FRAMES_N=6;
+        
+          // Dwell accounting
+          const dwell = new Array(items.length).fill(0);
+          let currentIdx=-1, lastTs=null;
+          function updateMetrics(){
+            const max = Math.max(...dwell, 1);
+            for (let i=0;i<dwell.length;i++){
+              const sec = dwell[i]/1000;
+              rows[i].time.textContent = sec.toFixed(1) + 's';
+              rows[i].fill.style.width = Math.min(100, (dwell[i]/max)*100) + '%';
+            }
+          }
+        
+          // Red gaze dot (your custom dot only)
+          const gazeDot = document.getElementById('gazeDot');
+        
+          // Ensure we don’t attach multiple listeners after recalibration
+          let gazeStarted = false;
+        
+          const DWELL_ACTIVATE_MS = 600;
+          const IMPLICIT_DWELL_MS = 1500;
+          let lastImplicitStamp = 0;
+        
+          function startGaze(){
+            if (gazeStarted) return;     // prevent double attach on recalibrate
+            gazeStarted = true;
+        
+            if (webgazer.setRegression) webgazer.setRegression('ridge');
+        
+            gazeDot.style.display = 'block';
+        
+            webgazer.setGazeListener((data, ts) => {
+              if (!data) { lastTs = ts; return; }
+        
+              // Smooth
+              const [sx, sy] = smoothXY(data.x, data.y);
+              gazeDot.style.left = sx + 'px';
+              gazeDot.style.top  = sy + 'px';
+        
+              // Outside/occluded: no selection
+              if (!pointInMenu(sx, sy) || !topMostIsInMenu(sx, sy)) {
+                if (lastTs!=null && currentIdx>=0){ dwell[currentIdx]+=Math.max(0, ts-lastTs); }
+                lastTs = ts;
+                highlightIdx(-1);
+                return;
+              }
+        
+              // Visible candidates only
+              const cand = [...visibleIdx];
+              let overRaw = -1;
+              for (const i of cand){
+                const eb = expandBBox(bbox(items[i]), 0.10);
+                const cb = clipToMenu(eb);
+                if (!cb) continue;
+                if (contains(cb, sx, sy)){ overRaw = i; break; }
+              }
+        
+              // Hysteresis
+              if (overRaw === stableIdx) stableFrames++; else { stableIdx = overRaw; stableFrames = 1; }
+              const overIdx = (stableFrames >= STABLE_FRAMES_N) ? stableIdx : -1;
+        
+              // Accumulate dwell for current item
+              if (lastTs!=null && currentIdx>=0){ dwell[currentIdx]+=Math.max(0, ts-lastTs); }
+              lastTs = ts;
+        
+              // Highlight after dwell threshold
+              if (overIdx !== currentIdx){
+                currentIdx = overIdx;
+                highlightIdx(-1);
+                return;
+              } else {
+                if (currentIdx >= 0){
+                  const curDwell = dwell[currentIdx];
+                  const isHi = items[currentIdx].classList.contains('highlight');
+                  if (!isHi && curDwell >= DWELL_ACTIVATE_MS) highlightIdx(currentIdx);
+        
+                  // Implicit calibration on long dwell
+                  const now = performance.now();
+                  if (curDwell >= IMPLICIT_DWELL_MS && (now-lastImplicitStamp)>800){
+                    const r = items[currentIdx].getBoundingClientRect();
+                    recordSamples(r.left+r.width/2, r.top+r.height/2, 12, 8);
+                    lastImplicitStamp = now;
+                  }
+                } else {
+                  highlightIdx(-1);
+                }
+              }
+            });
+        
+            // Metrics refresh loop
+            (function metricsLoop(){
+              updateMetrics();
+              requestAnimationFrame(metricsLoop);
+            })();
           }
         </script>
       </body>
