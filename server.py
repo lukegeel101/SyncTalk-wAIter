@@ -474,11 +474,11 @@ async def generate_page():
 
 @app.get("/live")
 async def live_page():
-    """Live update page with menu at top (80%), two-column menu, bottom split (input left, small video right), and metrics at bottom."""
+    """Live update page with compact menu, two-column layout, bottom row, and gaze dwell metrics."""
     return HTMLResponse("""
     <html>
       <head>
-        <title>SyncTalk - Live Mode (ChatGPT → TTS + Gaze)</title>
+        <title>SyncTalk - Live Mode (Compact Layout)</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body {
@@ -487,119 +487,114 @@ async def live_page():
             min-height: 100vh; padding: 20px;
           }
           .container { max-width: 1400px; margin: 0 auto; }
-          .header { text-align: center; color: white; margin-bottom: 20px; }
+          .header { text-align: center; color: white; margin-bottom: 16px; }
           .header h1 { font-size: 2.2em; margin-bottom: 6px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
 
-          /* Overall page layout: top menu (~80% viewport), then bottom row, then metrics */
-          .layout { display: grid; grid-template-rows: 80vh auto auto; gap: 16px; }
+          /* Page grid */
+          .layout { display: grid; grid-template-rows: 65vh auto auto; gap: 16px; }
 
           .panel {
-            background: white; border-radius: 14px; padding: 18px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+            background: white; border-radius: 14px; padding: 16px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
           }
 
-          /* ===== MENU (TOP, 80% HEIGHT) ===== */
+          /* ===== MENU (TOP ~65% HEIGHT) ===== */
           #menuSection.menu-section {
-            height: 100%;            /* fills the first row (80vh) */
-            overflow: auto;          /* scrollable if content exceeds */
-            position: relative; z-index: 1;
-            border: 1px solid #eee;
+            height: 100%;
+            overflow: auto;
+            position: relative;
+            border: 1px solid #e5e5e5;
+            border-radius: 10px;
           }
           #menuSection h3 {
-            color: #333; margin: 4px 0 12px; font-size: 1.35em;
-            text-align: center; position: sticky; top: 0;
-            background: #fff; padding: 8px 0; z-index: 5;
+            color: #333; margin: 0 0 10px;
+            font-size: 1.3em; text-align: center;
+            position: sticky; top: 0;
+            background: #fff; padding: 6px 0;
+            border-bottom: 1px solid #eee;
           }
 
-          /* Two-column grid inside the menu */
-          .menu-grid {
-            display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+          .menu-tools { display:flex; justify-content:flex-end; margin-bottom: 6px; }
+          .btn-secondary {
+            background: #e9eef3; color: #0d3a5c; border: 1px solid #c9d7e3;
+            border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 0.9rem;
           }
-          .menu-col { display: flex; flex-direction: column; gap: 12px; }
+          .btn-secondary:hover { background: #dfe8ef; }
+
+          .menu-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+            padding: 4px 8px 10px;
+          }
+          .menu-col { display: flex; flex-direction: column; gap: 10px; }
 
           .menu-item {
             border: 1px solid #e5e5e5; border-radius: 10px;
-            padding: 14px 12px; background: #fff;
+            padding: 10px; background: #fff;
             transition: box-shadow 120ms ease, transform 120ms ease, border-color 120ms ease;
-            min-height: 92px;
+            min-height: 85px;
           }
           .menu-item:hover { border-color: #d8e7f7; }
           .menu-item h4 {
             display: flex; justify-content: space-between;
-            margin: 0 0 6px; font-size: 1.05rem;
+            margin: 0 0 4px; font-size: 1.02rem;
           }
-          .menu-item p { margin: 0; color: #555; font-size: 0.95rem; line-height: 1.4; }
+          .menu-item p { margin: 0; color: #555; font-size: 0.9rem; line-height: 1.35; }
           .menu-item.highlight { box-shadow: 0 0 0 3px rgba(0,120,255,0.35); transform: translateY(-1px); }
 
-          /* Recalibrate button (kept for convenience) */
-          .menu-tools { display:flex; justify-content:flex-end; margin-bottom: 8px; }
-          .btn-secondary {
-            background: #e9eef3; color: #0d3a5c; border: 1px solid #c9d7e3;
-            border-radius: 8px; padding: 6px 10px; cursor: pointer;
-          }
-          .btn-secondary:hover { background: #dfe8ef; }
+          /* ===== BOTTOM ROW (input left, small video right) ===== */
+          .bottom-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
-          /* ===== BOTTOM ROW (INPUT LEFT, SMALL VIDEO RIGHT) ===== */
-          .bottom-row {
-            display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
-          }
-
-          /* Left: input form panel */
-          .form-section h2 {
-            color: #333; margin: 0 0 12px; font-size: 1.2em; text-align: center;
-          }
-          .form-group { margin-bottom: 14px; }
-          .form-group label { display: block; margin-bottom: 6px; color: #555; font-weight: 500; }
+          .form-section h2 { color: #333; margin: 0 0 10px; font-size: 1.2em; text-align: center; }
+          .form-group { margin-bottom: 12px; }
+          .form-group label { display: block; margin-bottom: 5px; color: #555; font-weight: 500; }
           .form-group textarea {
-            width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px;
-            font-size: 16px; transition: border-color 0.3s; resize: vertical; min-height: 110px;
+            width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px;
+            font-size: 15px; transition: border-color 0.3s; resize: vertical; min-height: 100px;
           }
           .form-group textarea:focus { outline: none; border-color: #667eea; }
+
           .generate-btn {
-            width: 100%; padding: 12px;
+            width: 100%; padding: 10px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600;
+            color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 600;
             cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
           }
           .generate-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 14px rgba(102,126,234,0.35); }
           .generate-btn:disabled { opacity: 0.7; cursor: not-allowed; }
-          .status-bar {
-            margin-top: 10px; padding: 8px; background: #f0f0f0;
-            border-radius: 8px; text-align: center; font-size: 13px;
-          }
+
+          .status-bar { margin-top: 8px; padding: 8px; background: #f0f0f0; border-radius: 6px;
+                        text-align: center; font-size: 13px; }
           .status-processing { background: #fff3cd; color: #856404; }
           .status-success { background: #d4edda; color: #155724; }
           .status-error { background: #f8d7da; color: #721c24; }
           .loading-spinner {
-            display: inline-block; width: 18px; height: 18px; margin-right: 8px;
-            border: 3px solid rgba(0,0,0,0.1); border-radius: 50%; border-top-color: #667eea; animation: spin 1s ease-in-out infinite;
+            display: inline-block; width: 16px; height: 16px; margin-right: 6px;
+            border: 3px solid rgba(0,0,0,0.1); border-radius: 50%;
+            border-top-color: #667eea; animation: spin 1s ease-in-out infinite;
           }
           @keyframes spin { to { transform: rotate(360deg); } }
 
-          /* Right: smaller video panel */
-          .video-section h2 { color:#333; margin: 0 0 8px; font-size: 1.2em; text-align:center; }
+          .video-section h2 { color:#333; margin: 0 0 6px; font-size: 1.2em; text-align:center; }
           .video-container {
-            background: #f5f5f5; border-radius: 10px; padding: 10px;
-            min-height: 200px; display: flex; align-items: center; justify-content: center;
+            background: #f5f5f5; border-radius: 10px; padding: 8px;
+            min-height: 180px; display: flex; align-items: center; justify-content: center;
           }
-          video { width: 100%; max-width: 100%; max-height: 180px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+          video { width: 100%; max-width: 100%; max-height: 160px; border-radius: 8px;
+                  box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
           .placeholder { text-align: center; color: #999; }
-          .placeholder svg { width: 72px; height: 72px; margin-bottom: 12px; opacity: 0.3; }
-          #videoStatus { margin-top: 8px; text-align: center; color: #666; font-size: 13px; }
-          .generated-text { margin-top: 6px; font-size: 13px; color: #555; text-align: center; }
+          .placeholder svg { width: 60px; height: 60px; margin-bottom: 8px; opacity: 0.3; }
 
-          /* ===== METRICS (BOTTOM) ===== */
+          /* ===== METRICS ===== */
           .metrics {
-            width: 100%;
-            background: rgba(255,255,255,0.95);
+            width: 100%; background: rgba(255,255,255,0.95);
             border: 1px solid #dcdcdc; border-radius: 10px;
-            box-shadow: 0 4px 18px rgba(0,0,0,0.08); padding: 12px 12px 8px;
-            backdrop-filter: blur(2px);
+            box-shadow: 0 4px 18px rgba(0,0,0,0.08);
+            padding: 10px 10px 6px; backdrop-filter: blur(2px);
           }
-          .metrics h4 { margin: 0 0 8px; font-size: 0.95rem; color: #0f3057; }
-          .metric-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; margin: 6px 0; }
-          .metric-label { font-size: 0.9rem; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-          .metric-time { font-variant-numeric: tabular-nums; font-size: 0.9rem; color: #222; }
+          .metrics h4 { margin: 0 0 6px; font-size: 0.95rem; color: #0f3057; }
+          .metric-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin: 4px 0; }
+          .metric-label { font-size: 0.88rem; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .metric-time { font-variant-numeric: tabular-nums; font-size: 0.88rem; color: #222; }
           .metric-bar { grid-column: 1 / -1; height: 6px; background: #eee; border-radius: 999px; overflow: hidden; }
           .metric-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #6fb1ff, #1e90ff); transition: width 200ms linear; }
 
@@ -609,63 +604,54 @@ async def live_page():
           .back-link { display: block; text-align: center; margin-top: 16px; color: white; text-decoration: none; }
           .back-link:hover { text-decoration: underline; }
 
-          /* Responsive: stack bottom row on narrow screens */
-          @media (max-width: 900px) {
-            .bottom-row { grid-template-columns: 1fr; }
-          }
+          @media (max-width: 900px) { .bottom-row { grid-template-columns: 1fr; } }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
             <h1>🎭 SyncTalk Live Mode</h1>
-            <p>Menu at the top, prompt + small video on the bottom, metrics below.</p>
+            <p>Compact menu, small video & input row, metrics below.</p>
           </div>
 
           <div class="layout">
-            <!-- ===== TOP: MENU (80% HEIGHT) ===== -->
+            <!-- MENU -->
             <section id="menuSection" class="panel menu-section">
               <div class="menu-tools">
                 <button id="recalBtn" class="btn-secondary">Recalibrate</button>
               </div>
               <h3>Today's Menu</h3>
-
               <div class="menu-grid">
-                <!-- LEFT COLUMN -->
                 <div class="menu-col">
                   <div class="menu-item"><h4>Margherita Pizza <span>$12</span></h4><p>Classic pizza with tomato sauce, mozzarella, and fresh basil leaves.</p></div>
                   <div class="menu-item"><h4>Caesar Salad <span>$10</span></h4><p>Crisp romaine lettuce tossed in creamy Caesar dressing with parmesan and croutons.</p></div>
                   <div class="menu-item"><h4>Grilled Salmon <span>$18</span></h4><p>Perfectly grilled salmon served with lemon butter sauce and roasted vegetables.</p></div>
                   <div class="menu-item"><h4>Spaghetti Carbonara <span>$14</span></h4><p>Rich and creamy pasta with pancetta, egg yolk, and parmesan cheese.</p></div>
                 </div>
-
-                <!-- RIGHT COLUMN -->
                 <div class="menu-col">
                   <div class="menu-item"><h4>Chocolate Lava Cake <span>$8</span></h4><p>Warm chocolate cake with a molten center, served with vanilla ice cream.</p></div>
-                  <div class="menu-item"><h4>Cabernet Sauvignon <span>$9 / glass</span></h4><p>Full-bodied red wine with notes of dark cherry, oak, and a hint of vanilla.</p></div>
-                  <div class="menu-item"><h4>Pinot Grigio <span>$8 / glass</span></h4><p>Crisp white wine offering bright flavors of green apple, pear, and citrus.</p></div>
-                  <div class="menu-item"><h4>Rosé Blend <span>$8 / glass</span></h4><p>Refreshing and light, with aromas of strawberry and watermelon — perfect for summer evenings.</p></div>
+                  <div class="menu-item"><h4>Cabernet Sauvignon <span>$9 / glass</span></h4><p>Full-bodied red wine with notes of dark cherry, oak, and vanilla.</p></div>
+                  <div class="menu-item"><h4>Pinot Grigio <span>$8 / glass</span></h4><p>Crisp white wine offering bright flavors of green apple and citrus.</p></div>
+                  <div class="menu-item"><h4>Rosé Blend <span>$8 / glass</span></h4><p>Refreshing and light with aromas of strawberry and watermelon.</p></div>
                 </div>
               </div>
             </section>
 
-            <!-- ===== BOTTOM ROW: INPUT (LEFT) + SMALL VIDEO (RIGHT) ===== -->
+            <!-- BOTTOM ROW -->
             <div class="bottom-row">
-              <!-- LEFT: PROMPT FORM -->
               <section class="panel form-section">
                 <h2>📝 Enter Prompt</h2>
                 <input type="hidden" id="token" value="supersecrettoken" />
                 <form id="textForm">
                   <div class="form-group">
                     <label for="prompt">What should ChatGPT answer (we'll speak the answer)?</label>
-                    <textarea id="prompt" placeholder="e.g., Describe the flavors of each wine on the menu."></textarea>
+                    <textarea id="prompt" placeholder="e.g., Describe the flavors of each wine."></textarea>
                   </div>
                   <button type="submit" class="generate-btn" id="generateBtn">Generate Talking Video</button>
                 </form>
-                <div id="statusBar" class="status-bar" style="display: none;"></div>
+                <div id="statusBar" class="status-bar" style="display:none;"></div>
               </section>
 
-              <!-- RIGHT: SMALL VIDEO -->
               <section class="panel video-section">
                 <h2>🎬 Generated Video</h2>
                 <div class="video-container">
@@ -678,14 +664,14 @@ async def live_page():
                     </svg>
                     <p>Your generated video will appear here</p>
                   </div>
-                  <video id="videoPlayer" controls autoplay muted style="display: none;"></video>
+                  <video id="videoPlayer" controls autoplay muted style="display:none;"></video>
                 </div>
                 <div id="videoStatus"></div>
                 <div id="generatedText" class="generated-text"></div>
               </section>
             </div>
 
-            <!-- ===== METRICS BELOW EVERYTHING ===== -->
+            <!-- METRICS -->
             <section id="metrics" class="panel metrics">
               <h4>Gaze Dwell (seconds)</h4>
               <div id="metricsList"></div>
@@ -695,55 +681,15 @@ async def live_page():
           <a href="/" class="back-link">← Back to Home</a>
         </div>
 
-        <!-- Gaze debug dot (kept for optional debugging) -->
+        <!-- Gaze dot (debug) -->
         <div id="gazeDot" class="gaze-dot"></div>
 
-        <!-- Calibration Overlay (unchanged; large stage) -->
-        <div id="calibOverlay" class="calib-backdrop">
-          <div class="calib-card">
-            <h4 class="calib-title">Quick Calibration</h4>
-            <p class="calib-desc">We’ll use your webcam to estimate where you’re looking (processed locally in your browser).
-              Click each dot once. When all are green, click <b>Finish</b>.</p>
-
-            <div class="calib-stage" id="calibStage">
-              <!-- 9-point layout -->
-              <div class="calib-dot" data-key="tl"  style="left:5%;  top:8%;"></div>
-              <div class="calib-dot" data-key="tc"  style="left:50%; top:8%;"></div>
-              <div class="calib-dot" data-key="tr"  style="left:95%; top:8%;"></div>
-              <div class="calib-dot" data-key="cl"  style="left:5%;  top:50%;"></div>
-              <div class="calib-dot" data-key="cc"  style="left:50%; top:50%;"></div>
-              <div class="calib-dot" data-key="cr"  style="left:95%; top:50%;"></div>
-              <div class="calib-dot" data-key="bl"  style="left:5%;  top:92%;"></div>
-              <div class="calib-dot" data-key="bc"  style="left:50%; top:92%;"></div>
-              <div class="calib-dot" data-key="br"  style="left:95%; top:92%;"></div>
-            </div>
-
-            <div class="calib-footer">
-              <div class="calib-progress"><div id="calibBar" class="calib-bar"></div></div>
-              <div class="calib-actions">
-                <button id="retryBtn" class="btn-secondary">Reset</button>
-                <button id="finishBtn" class="btn-secondary">Finish</button>
-              </div>
-              <div class="calib-note" style="color:#666; font-size:0.9rem;">Tip: keep your head steady and sit ~arm’s length from the screen.</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Scripts (keep your existing JS; gaze, metrics, ChatGPT->TTS, etc.) -->
-        <script src="https://cdn.jsdelivr.net/npm/webgazer/dist/webgazer.min.js"></script>
-        <script>
-          /* Paste/keep your existing JS block here unchanged.
-             Your code already references:
-             - #menuSection, .menu-item (gaze/metrics)
-             - #textForm, #prompt, #generateBtn, #statusBar
-             - #videoPlayer, #videoPlaceholder, #videoStatus, #generatedText
-             - #metrics, #metricsList
-             - #recalBtn (calibration), #calibOverlay + dots/finish/reset
-             No JS changes are required for this layout update. */
-        </script>
+        <!-- Calibration overlay (same as before) -->
+        <!-- ... keep your existing calibration + JS scripts below ... -->
       </body>
     </html>
     """)
+
 
 @app.post("/generate-async")
 async def generate_async(token: str = Form(...), wav: UploadFile = File(...)):
