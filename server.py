@@ -1001,14 +1001,6 @@ async def live_page():
                     updateBar();
                 }
 
-                // Take a bigger burst of samples — improves the regression fit
-                function recordSamples(x, y, n = 24, interval = 6) {
-                  if (!webgazer || !webgazer.recordScreenPosition) return;
-                  for (let i = 0; i < n; i++) {
-                    setTimeout(() => webgazer.recordScreenPosition(x, y, performance.now()), i * interval);
-                  }
-                }
-
                 dots.forEach(dot => {
                   dot.addEventListener('click', () => {
                     dot.classList.add('done');
@@ -1082,7 +1074,7 @@ async def live_page():
 
                 /* ---------- Start gaze listener ---------- */
                 const DWELL_ACTIVATE_MS = 600;
-
+                
                 function startGaze() {
                   if (webgazer.setRegression) webgazer.setRegression('ridge');
                 
@@ -1092,9 +1084,14 @@ async def live_page():
                     // Smooth jitter
                     const [x, y] = smoothXY(data.x, data.y);
                 
+                    // (Optional) show the red debug dot so you can confirm it's working:
+                    // const gd = document.getElementById('gazeDot');
+                    // gd.style.display = 'block';
+                    // gd.style.left = x + 'px';
+                    // gd.style.top  = y + 'px';
+                
                     // Ignore gaze when pointer is outside the menu box
                     if (!pointInMenu(x, y)) {
-                      // still update dwell time for current item if any
                       if (lastTs != null && currentIdx >= 0) {
                         const dt = Math.max(0, ts - lastTs);
                         dwell[currentIdx] += dt;
@@ -1104,7 +1101,7 @@ async def live_page():
                       return;
                     }
                 
-                    // Ignore if topmost element isn't in the menu (e.g., you're looking at the prompt below)
+                    // Ignore if topmost element isn't in the menu (e.g., looking at prompt below)
                     if (!topMostIsInMenu(x, y)) {
                       if (lastTs != null && currentIdx >= 0) {
                         const dt = Math.max(0, ts - lastTs);
@@ -1122,8 +1119,8 @@ async def live_page():
                     let overIdxRaw = -1;
                     for (const i of candidates) {
                       const el = items[i];
-                      const eb = expandBBox(bbox(el), 0.10);        // small expansion
-                      const cb = clipToMenu(eb);                    // clip to menu viewport
+                      const eb = expandBBox(bbox(el), 0.10);   // small expansion
+                      const cb = clipToMenu(eb);               // clip to menu viewport
                       if (!cb) continue;
                       if (contains(cb, x, y)) { overIdxRaw = i; break; }
                     }
@@ -1172,13 +1169,11 @@ async def live_page():
                     }
                   });
                 
-                  // Metrics UI loop
+                  // Metrics UI loop (run once we start gaze)
                   (function metricsLoop() {
                     updateMetrics();
                     requestAnimationFrame(metricsLoop);
                   })();
-                }
-                  metricsLoop();
                 }
             </script>
         </body>
