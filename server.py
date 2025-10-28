@@ -980,44 +980,43 @@ async def live_page():
                   });
                 });
 
-                // When opening calibration from your Recalibrate button/hotkey:
-                document.getElementById('recalBtn')?.addEventListener('click', () => {
-                  overlay.classList.remove('hidden'); resetCalibration(); lockScroll();
-                });
-                document.addEventListener('keydown', (e) => {
-                  if (e.key.toLowerCase() === 'c') { overlay.classList.remove('hidden'); resetCalibration(); lockScroll(); }
-                });
-                
-                finishBtn.addEventListener('click', () => {
-                  if (done.size < dots.length) { alert('Please click all nine dots to complete calibration.'); return; }
-                  overlay.classList.add('hidden'); unlockScroll();
-                  startGaze(); // your existing function
-                });
-
-                retryBtn.addEventListener('click', resetCalibration);
-                
-                document.getElementById('recalBtn').addEventListener('click', () => {
+                // ---------- Calibration open / close logic ----------
+                function openCalibration() {
                   overlay.classList.remove('hidden');
                   resetCalibration();
-                });
+                  lockScroll();
+                }
                 
-                // Hotkey 'c' to open calibration quickly
+                // Recalibrate button click
+                document.getElementById('recalBtn')?.addEventListener('click', openCalibration);
+                
+                // Hotkey: Ctrl+Shift+C (won’t trigger while typing)
                 document.addEventListener('keydown', (e) => {
-                  if (e.key.toLowerCase() === 'c') {
-                    overlay.classList.remove('hidden');
-                    resetCalibration();
+                  const el = document.activeElement;
+                  const isTyping =
+                    el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+                
+                  if (isTyping) return; // don't trigger while typing
+                  if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'c') {
+                    e.preventDefault();
+                    openCalibration();
                   }
                 });
-
-
+                
+                // Finish calibration
                 finishBtn.addEventListener('click', () => {
-                    if (done.size < dots.length) {
-                        alert('Please click all five dots to complete calibration.');
-                        return;
-                    }
-                    overlay.classList.add('hidden');
-                    startGaze();
+                  if (done.size < dots.length) {
+                    alert('Please click all nine dots to complete calibration.');
+                    return;
+                  }
+                  overlay.classList.add('hidden');
+                  unlockScroll();
+                  startGaze(); // your existing function
                 });
+                
+                // Retry (reset) calibration
+                retryBtn.addEventListener('click', resetCalibration);
+
 
                 /* ---------- WebGazer init ---------- */
                 (async function initWebGazer(){
