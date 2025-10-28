@@ -474,7 +474,6 @@ async def generate_page():
 
 @app.get("/live")
 async def live_page():
-    """Live update page with compact menu, two-column layout, bottom row, and gaze dwell metrics."""
     return HTMLResponse("""
     <html>
       <head>
@@ -490,7 +489,6 @@ async def live_page():
           .header { text-align: center; color: white; margin-bottom: 16px; }
           .header h1 { font-size: 2.2em; margin-bottom: 6px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
 
-          /* Page grid */
           .layout { display: grid; grid-template-rows: 65vh auto auto; gap: 16px; }
 
           .panel {
@@ -513,20 +511,14 @@ async def live_page():
             background: #fff; padding: 6px 0;
             border-bottom: 1px solid #eee;
           }
-
           .menu-tools { display:flex; justify-content:flex-end; margin-bottom: 6px; }
           .btn-secondary {
             background: #e9eef3; color: #0d3a5c; border: 1px solid #c9d7e3;
             border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 0.9rem;
           }
           .btn-secondary:hover { background: #dfe8ef; }
-
-          .menu-grid {
-            display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
-            padding: 4px 8px 10px;
-          }
+          .menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 4px 8px 10px; }
           .menu-col { display: flex; flex-direction: column; gap: 10px; }
-
           .menu-item {
             border: 1px solid #e5e5e5; border-radius: 10px;
             padding: 10px; background: #fff;
@@ -534,16 +526,12 @@ async def live_page():
             min-height: 85px;
           }
           .menu-item:hover { border-color: #d8e7f7; }
-          .menu-item h4 {
-            display: flex; justify-content: space-between;
-            margin: 0 0 4px; font-size: 1.02rem;
-          }
+          .menu-item h4 { display: flex; justify-content: space-between; margin: 0 0 4px; font-size: 1.02rem; }
           .menu-item p { margin: 0; color: #555; font-size: 0.9rem; line-height: 1.35; }
           .menu-item.highlight { box-shadow: 0 0 0 3px rgba(0,120,255,0.35); transform: translateY(-1px); }
 
-          /* ===== BOTTOM ROW (input left, small video right) ===== */
+          /* ===== BOTTOM ROW ===== */
           .bottom-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-
           .form-section h2 { color: #333; margin: 0 0 10px; font-size: 1.2em; text-align: center; }
           .form-group { margin-bottom: 12px; }
           .form-group label { display: block; margin-bottom: 5px; color: #555; font-weight: 500; }
@@ -552,7 +540,6 @@ async def live_page():
             font-size: 15px; transition: border-color 0.3s; resize: vertical; min-height: 100px;
           }
           .form-group textarea:focus { outline: none; border-color: #667eea; }
-
           .generate-btn {
             width: 100%; padding: 10px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -561,17 +548,11 @@ async def live_page():
           }
           .generate-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 14px rgba(102,126,234,0.35); }
           .generate-btn:disabled { opacity: 0.7; cursor: not-allowed; }
-
-          .status-bar { margin-top: 8px; padding: 8px; background: #f0f0f0; border-radius: 6px;
-                        text-align: center; font-size: 13px; }
+          .status-bar { margin-top: 8px; padding: 8px; background: #f0f0f0; border-radius: 6px; text-align: center; font-size: 13px; }
           .status-processing { background: #fff3cd; color: #856404; }
           .status-success { background: #d4edda; color: #155724; }
           .status-error { background: #f8d7da; color: #721c24; }
-          .loading-spinner {
-            display: inline-block; width: 16px; height: 16px; margin-right: 6px;
-            border: 3px solid rgba(0,0,0,0.1); border-radius: 50%;
-            border-top-color: #667eea; animation: spin 1s ease-in-out infinite;
-          }
+          .loading-spinner { display: inline-block; width: 16px; height: 16px; margin-right: 6px; border: 3px solid rgba(0,0,0,0.1); border-radius: 50%; border-top-color: #667eea; animation: spin 1s ease-in-out infinite; }
           @keyframes spin { to { transform: rotate(360deg); } }
 
           .video-section h2 { color:#333; margin: 0 0 6px; font-size: 1.2em; text-align:center; }
@@ -579,8 +560,7 @@ async def live_page():
             background: #f5f5f5; border-radius: 10px; padding: 8px;
             min-height: 180px; display: flex; align-items: center; justify-content: center;
           }
-          video { width: 100%; max-width: 100%; max-height: 160px; border-radius: 8px;
-                  box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+          video { width: 100%; max-width: 100%; max-height: 160px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
           .placeholder { text-align: center; color: #999; }
           .placeholder svg { width: 60px; height: 60px; margin-bottom: 8px; opacity: 0.3; }
 
@@ -598,13 +578,25 @@ async def live_page():
           .metric-bar { grid-column: 1 / -1; height: 6px; background: #eee; border-radius: 999px; overflow: hidden; }
           .metric-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #6fb1ff, #1e90ff); transition: width 200ms linear; }
 
-          /* Gaze dot (debug; hidden by default) */
           .gaze-dot { position: fixed; width: 8px; height: 8px; border-radius: 50%; background: red; pointer-events: none; z-index: 99999; transform: translate(-50%, -50%); display: none; }
 
           .back-link { display: block; text-align: center; margin-top: 16px; color: white; text-decoration: none; }
           .back-link:hover { text-decoration: underline; }
 
           @media (max-width: 900px) { .bottom-row { grid-template-columns: 1fr; } }
+
+          /* === Calibration overlay === */
+          .calib-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; z-index: 99998; }
+          .calib-card { position: relative; width: 96vw; max-width: 1400px; background: #fff; border-radius: 12px; padding: 16px 16px 22px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
+          .calib-title { margin: 0 0 6px; font-size: 1.15rem; }
+          .calib-desc { margin: 0 0 12px; color: #555; font-size: 0.95rem; }
+          .calib-stage { position: relative; width: 100%; height: min(78vh, 900px); border: 1px dashed #ddd; border-radius: 10px; background: #fafafa; overflow: hidden; }
+          .calib-dot { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #0077cc; box-shadow: 0 0 0 6px rgba(0,119,204,0.18); cursor: pointer; transform: translate(-50%, -50%); transition: transform 120ms ease, background 120ms ease, box-shadow 120ms ease; }
+          .calib-dot.done { background: #2e7d32; box-shadow: 0 0 0 6px rgba(46,125,50,0.18); transform: translate(-50%, -50%) scale(0.9); }
+          .calib-footer { display: flex; align-items: center; gap: 12px; margin-top: 12px; justify-content: space-between; flex-wrap: wrap; }
+          .calib-progress { flex: 1; height: 10px; background: #eee; border-radius: 999px; overflow: hidden; min-width: 160px; }
+          .calib-bar { height: 100%; width: 0%; background: linear-gradient(90deg,#0077cc,#00a1ff); }
+          .hidden { display: none !important; }
         </style>
       </head>
       <body>
@@ -681,14 +673,146 @@ async def live_page():
           <a href="/" class="back-link">← Back to Home</a>
         </div>
 
-        <!-- Gaze dot (debug) -->
+        <!-- Red gaze dot (for debugging) -->
         <div id="gazeDot" class="gaze-dot"></div>
 
-        <!-- Calibration overlay (same as before) -->
-        <!-- ... keep your existing calibration + JS scripts below ... -->
+        <!-- Calibration Overlay (VISIBLE at load) -->
+        <div id="calibOverlay" class="calib-backdrop">
+          <div class="calib-card">
+            <h4 class="calib-title">Quick Calibration</h4>
+            <p class="calib-desc">Click each dot. When all are green, click <b>Finish</b>.</p>
+
+            <div class="calib-stage" id="calibStage">
+              <div class="calib-dot" data-key="tl"  style="left:5%;  top:8%;"></div>
+              <div class="calib-dot" data-key="tc"  style="left:50%; top:8%;"></div>
+              <div class="calib-dot" data-key="tr"  style="left:95%; top:8%;"></div>
+              <div class="calib-dot" data-key="cl"  style="left:5%;  top:50%;"></div>
+              <div class="calib-dot" data-key="cc"  style="left:50%; top:50%;"></div>
+              <div class="calib-dot" data-key="cr"  style="left:95%; top:50%;"></div>
+              <div class="calib-dot" data-key="bl"  style="left:5%;  top:92%;"></div>
+              <div class="calib-dot" data-key="bc"  style="left:50%; top:92%;"></div>
+              <div class="calib-dot" data-key="br"  style="left:95%; top:92%;"></div>
+            </div>
+
+            <div class="calib-footer">
+              <div class="calib-progress"><div id="calibBar" class="calib-bar"></div></div>
+              <div class="calib-actions">
+                <button id="retryBtn" class="btn-secondary">Reset</button>
+                <button id="finishBtn" class="btn-secondary">Finish</button>
+              </div>
+              <div class="calib-note" style="color:#666; font-size:0.9rem;">Use HTTPS or localhost; allow camera access.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scripts -->
+        <script src="https://cdn.jsdelivr.net/npm/webgazer/dist/webgazer.min.js"></script>
+        <script>
+          // ------------- Basic calibration wiring (clean, no duplicates) -------------
+          const overlay   = document.getElementById('calibOverlay');
+          const dots      = Array.from(document.querySelectorAll('.calib-dot'));
+          const bar       = document.getElementById('calibBar');
+          const finishBtn = document.getElementById('finishBtn');
+          const retryBtn  = document.getElementById('retryBtn');
+          const recalBtn  = document.getElementById('recalBtn');
+
+          function lockScroll(){ document.body.dataset._prevOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; }
+          function unlockScroll(){ document.body.style.overflow = document.body.dataset._prevOverflow || ''; }
+
+          function updateBar() {
+            const doneCount = dots.filter(d => d.classList.contains('done')).length;
+            bar.style.width = Math.round((doneCount / dots.length) * 100) + '%';
+          }
+          function resetCalibration() {
+            dots.forEach(d => d.classList.remove('done'));
+            updateBar();
+          }
+          function recordSamples(x, y, n=28, interval=5) {
+            if (!window.webgazer || !webgazer.recordScreenPosition) return;
+            for (let i=0;i<n;i++) {
+              setTimeout(() => webgazer.recordScreenPosition(x, y, performance.now()), i*interval);
+            }
+          }
+
+          // Dot clicks: mark done + burst samples
+          dots.forEach(dot => {
+            dot.addEventListener('click', () => {
+              dot.classList.add('done');
+              updateBar();
+              const r  = dot.getBoundingClientRect();
+              const cx = r.left + r.width/2;
+              const cy = r.top  + r.height/2;
+              recordSamples(cx, cy);
+            });
+          });
+
+          // Finish / Reset
+          finishBtn.addEventListener('click', () => {
+            if (dots.some(d => !d.classList.contains('done'))) {
+              alert('Please click all dots to complete calibration.');
+              return;
+            }
+            overlay.classList.add('hidden');
+            unlockScroll();
+            startGaze();
+          });
+          retryBtn.addEventListener('click', resetCalibration);
+
+          // Recalibrate button + hotkey Ctrl+Shift+C
+          function openCalibration() {
+            overlay.classList.remove('hidden');
+            resetCalibration();
+            lockScroll();
+          }
+          recalBtn?.addEventListener('click', openCalibration);
+          document.addEventListener('keydown', (e) => {
+            const el = document.activeElement;
+            const isTyping = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+            if (isTyping) return;
+            if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'c') {
+              e.preventDefault(); openCalibration();
+            }
+          });
+
+          // ------------- WebGazer init -------------
+          (async function initWebGazer(){
+            try {
+              if (webgazer.addMouseEventListeners) webgazer.addMouseEventListeners();
+              await webgazer.begin();
+
+              // Hide stock overlays if present
+              const hide = id => { const n = document.getElementById(id); if (n) n && (n.style.display='none'); };
+              hide('webgazerVideoContainer');
+              hide('webgazerGazeDot');
+
+              // Show overlay on load and lock scroll
+              lockScroll();
+              console.log('WebGazer initialized.');
+            } catch (e) {
+              console.error('WebGazer failed to start:', e);
+              alert('Could not start camera. Use HTTPS or localhost and allow camera access.');
+            }
+          })();
+
+          // ------------- Minimal gaze listener (shows red dot so you can verify) -------------
+          const gazeDot = document.getElementById('gazeDot');
+          function startGaze() {
+            if (webgazer.setRegression) webgazer.setRegression('ridge');
+
+            // Make the red debug dot visible
+            gazeDot.style.display = 'block';
+
+            webgazer.setGazeListener((data) => {
+              if (!data) return;
+              gazeDot.style.left = data.x + 'px';
+              gazeDot.style.top  = data.y + 'px';
+            });
+          }
+        </script>
       </body>
     </html>
     """)
+
 
 
 @app.post("/generate-async")
