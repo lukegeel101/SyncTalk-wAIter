@@ -505,6 +505,8 @@ async def live_page():
                     border: 1px solid #eee;
                     border-radius: 10px;
                     background: #fafafa;
+                    position: relative;
+                    z-index: 1;
                 }
                 .menu-section h3 {
                     color: #333; margin: 4px 0 12px; font-size: 1.4em;
@@ -847,6 +849,48 @@ async def live_page():
                 const labels = items.map(el => el.querySelector('h4')?.childNodes?.[0]?.textContent.trim() || 'Item');
                 const gazeDot = document.getElementById('gazeDot');
 
+                // --- Container & visibility helpers ---
+                const menuSection = document.getElementById('menuSection');
+                
+                // Track which menu items are visibly within the scroll container
+                const visibleIdx = new Set();
+                const io = new IntersectionObserver((entries) => {
+                  entries.forEach(entry => {
+                    const i = items.indexOf(entry.target);
+                    if (i === -1) return;
+                    if (entry.intersectionRatio >= 0.6) visibleIdx.add(i);
+                    else visibleIdx.delete(i);
+                  });
+                }, {
+                  // Observe visibility within the scrollable menu
+                  root: menuSection,
+                  threshold: [0, 0.25, 0.5, 0.6, 0.75, 1],
+                });
+                items.forEach(el => io.observe(el));
+                
+                // Check if screen point is inside the scrollable menu's viewport box
+                function pointInMenu(x, y) {
+                  const r = menuSection.getBoundingClientRect();
+                  return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+                }
+                
+                // Check if the topmost element under the gaze point belongs to the menu
+                function topMostIsInMenu(x, y) {
+                  const el = document.elementFromPoint(x, y);
+                  return !!el && (el === menuSection || menuSection.contains(el));
+                }
+                
+                // Clip an expanded bbox to the menu container so we don't select hidden rows
+                function clipToMenu(b) {
+                  const r = menuSection.getBoundingClientRect();
+                  const x1 = Math.max(b.x, r.left);
+                  const y1 = Math.max(b.y, r.top);
+                  const x2 = Math.min(b.x + b.w, r.right);
+                  const y2 = Math.min(b.y + b.h, r.bottom);
+                  if (x2 <= x1 || y2 <= y1) return null;
+                  return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+                }
+
                 // --------- Smoothing (EMA) ----------
                 let smX = null, smY = null;
                 const SMOOTH_ALPHA = 0.25; // 0.15-0.35 works; higher = snappier
@@ -1037,27 +1081,54 @@ async def live_page():
                 })();
 
                 /* ---------- Start gaze listener ---------- */
-                const DWELL_ACTIVATE_MS = 600; // highlight dwell threshold
+                const DWELL_ACTIVATE_MS = 600;
+
                 function startGaze() {
                   if (webgazer.setRegression) webgazer.setRegression('ridge');
                 
                   webgazer.setGazeListener((data, ts) => {
                     if (!data) { lastTs = ts; return; }
                 
-                    // 1) Smooth the point
+                    // Smooth jitter
                     const [x, y] = smoothXY(data.x, data.y);
                 
-                    // (Optional) debug dot
-                    // gazeDot.style.left = x + 'px';
-                    // gazeDot.style.top  = y + 'px';
+                    // Ignore gaze when pointer is outside the menu box
+                    if (!pointInMenu(x, y)) {
+                      // still update dwell time for current item if any
+                      if (lastTs != null && currentIdx >= 0) {
+                        const dt = Math.max(0, ts - lastTs);
+                        dwell[currentIdx] += dt;
+                      }
+                      lastTs = ts;
+                      highlightIdx(-1);
+                      return;
+                    }
                 
-                    // 2) Which item under gaze? Use expanded hitboxes
-                    const overIdxRaw = items.findIndex(el => {
-                      const eb = expandBBox(bbox(el));   // expanded
-                      return contains(eb, x, y);
-                    });
+                    // Ignore if topmost element isn't in the menu (e.g., you're looking at the prompt below)
+                    if (!topMostIsInMenu(x, y)) {
+                      if (lastTs != null && currentIdx >= 0) {
+                        const dt = Math.max(0, ts - lastTs);
+                        dwell[currentIdx] += dt;
+                      }
+                      lastTs = ts;
+                      highlightIdx(-1);
+                      return;
+                    }
                 
-                    // 3) Hysteresis: require a few frames on the same item
+                    // Only consider items currently visible in the scroll container
+                    const candidates = [...visibleIdx];
+                
+                    // Find which visible item contains the point (with expanded, clipped bbox)
+                    let overIdxRaw = -1;
+                    for (const i of candidates) {
+                      const el = items[i];
+                      const eb = expandBBox(bbox(el), 0.10);        // small expansion
+                      const cb = clipToMenu(eb);                    // clip to menu viewport
+                      if (!cb) continue;
+                      if (contains(cb, x, y)) { overIdxRaw = i; break; }
+                    }
+                
+                    // Hysteresis over selection
                     if (overIdxRaw === stableIdx) {
                       stableFrames++;
                     } else {
@@ -1066,14 +1137,14 @@ async def live_page():
                     }
                     const overIdx = (stableFrames >= STABLE_FRAMES_N) ? stableIdx : -1;
                 
-                    // 4) Accumulate dwell against the *currentIdx* we consider active
+                    // Accumulate dwell for current item
                     if (lastTs != null && currentIdx >= 0) {
                       const dt = Math.max(0, ts - lastTs);
                       dwell[currentIdx] += dt;
                     }
                     lastTs = ts;
                 
-                    // 5) Switch logic + highlight after dwell threshold
+                    // Highlight only after dwell threshold
                     if (overIdx !== currentIdx) {
                       currentIdx = overIdx;
                       highlightIdx(-1);
@@ -1086,13 +1157,13 @@ async def live_page():
                           highlightIdx(currentIdx);
                         }
                 
-                        // 6) Implicit calibration once per item every IMPLICIT_DWELL_MS
+                        // Optional: implicit calibration on long dwell
                         const now = performance.now();
                         if (currentDwell >= IMPLICIT_DWELL_MS && (now - lastImplicitStamp) > 800) {
                           const r = items[currentIdx].getBoundingClientRect();
                           const cx = r.left + r.width/2;
                           const cy = r.top  + r.height/2;
-                          recordSamples(cx, cy, /*n=*/12, /*interval=*/8);
+                          recordSamples(cx, cy, 12, 8);
                           lastImplicitStamp = now;
                         }
                       } else {
@@ -1101,11 +1172,12 @@ async def live_page():
                     }
                   });
                 
-                  // Metrics refresh loop (unchanged)
-                  function metricsLoop() {
+                  // Metrics UI loop
+                  (function metricsLoop() {
                     updateMetrics();
                     requestAnimationFrame(metricsLoop);
-                  }
+                  })();
+                }
                   metricsLoop();
                 }
             </script>
